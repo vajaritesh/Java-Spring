@@ -1,0 +1,70 @@
+Topic in this file:
+	-	What is the Spring Framework?
+	-	Spring Framework History
+	-	What is Spring Used for?
+
+
+1) What is Spring Framework?
+Spring is an Open Source, Lightweight, Container and Framework for building Java enterprise applications.
+
+Open Source: 	Spring binary and source code is freely available
+Lightweight: 	Spring applications do not require a Java EE application server. Spring Jars are relatively small ~< 8MB
+Container: 		Spring serves as a container for your application objects. 
+		   		Objects do not have to worry about finding/connecting to each other.
+		   		Spring instantiates and injects dependency of objects.
+		   		Serves as a object life-cycle manager
+Framework: 		Enterprise applications deals with wide variety of technologies like:
+		   		JDBC, JMS, Transactions, ORM/JPA, Security, XML/JSON, REST/SOAP services, Mobile, Web etc.
+		   		Spring provides framework classes to work with all these lower level technologies.
+		   		
+2) Why Spring introduced? What is the need of Spring frameworks?
+A brief history of Java:-
+	The early years:
+		1995 - Java introduced, Applets are popular
+		1997 - Servlets came
+			   Efficient, dynamic web pages become possible.
+		1999 - JSP came
+			   Efficient, dynamic web pages become easy.
+			   
+		Questions arise regarding "Enterprise" applications
+		How should a Servlet/JSP application handle:
+		Persistence?		Business Logic?
+		Transactions?		Messaging?
+		Security?			Man more etc.?
+		
+		Java answered: J2EE
+		1999 - J2EE introduced
+			   Using Enterprise Java Beans (EJB) Persistence, Transactions, Business logic, Security etc possible.
+		However EJBs are more problematic:
+			- Difficult to code: Must implement/extend specific classes/interfaces
+			- Difficult to unit test
+			- Expensive to run: Must have application server, resource intensive
+			
+	The Birth of Spring:
+	Rod Johnson published J2EE Enterprise Application development without use of EJB. 
+	2004 - 	Spring Framework 1.0 released
+		 -	Dependency Injection
+	 	 -	Encourages POJOs
+		 -	Use of XML to describing application configuration
+		 -	Becomes popular quickly as an EJB alternative
+		
+A brief history of Spring Framework:
+	2006 -	Spring 2.0 introduced
+			XML simplification, async JMS, JPA, Aspect J support
+	2007 -	Spring 2.5 introduced
+			Requires Java 1.4+ and supports JUnit 4
+			Annotation DI, @MVC controllers, XML namespaces
+	2006 -	Spring 3.x introduced
+			Requires 1.5+ and JUnit 4.7+
+			Environment and Profiles, @Cacheable, @EnableXXX...
+			REST Support, JavaConfig, SpEL, more annotations
+	2013 - 	Spring 4.x introduced
+			Support for Java 8, @Conditional, Web-sockets
+	2017 - 	Spring 5.x introduced
+			Reactive programming focus 
+		
+3) Spring is used for what?
+	Spring provides comprehensive infrastructural support for developing enterprise Java applications
+	- Spring deals with the require plumbing
+	- So you can focus on solving the domain problem
+	 
