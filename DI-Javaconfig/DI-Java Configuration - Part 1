@@ -1,0 +1,353 @@
+Topic in this file:
+	-	Define Spring Beans using Java Code
+	-	Access Beans in the Application Context
+	-	Handle multiple Configuration files
+	-	Handle dependencies between Beans
+	-	Explain and define Bean Scopes
+	
+(1)	How Spring works?
+
+	At the high level:
+	Basically you give (A)your application classes (POJOs) to Spring application context, which uses (B)Configuration Instruction 
+	to (C) creates ready made enterprise application.
+	
+			
+	(B)Configuration Instruction -->	Spring Application Context	<-- (A) Your Applications Classes (POJOs)
+											||
+											|| creates
+											||	
+							() Fully Configured application system	(Ready for use)
+
+						
+	Example: To transfer money from one account to another account. 							
+	(A) Your Applications Classes:
+	public class TransferServiceImpl implements TransferService {
+		public TransferServicesImpl(AccountRepository ar) {
+			this.accountRepository = ar;
+		}
+		...
+	}
+
+	public class JdbcAccountRepository implements AccountRepository {
+		public JdbcAccountRepository(DataSource ds) {
+			this.dataSource = ds;
+		}
+	}
+
+(B) Configuration Instructions:
+@Configuraiton
+public class ApplicationConfig {
+	@Bean
+	public TransferService transferService() {
+		return new TransferServiceImpl(accountRepository());
+	}
+	@Bean
+	public AccountRepository accountRepository() {
+		return new JdbcAccountRepository(dataSource());
+	}
+	@Bean
+	public DataSource dataSource() {
+		BasicDataSource dataSource = new BasicDataSource();
+		dataSource.setDriverClassName("org.mysql.Driver");
+		dataSource.setUrl("jdbc:mysql://localhost/transfer");
+		dataSource.setUsername("transfer-app");
+		dataSource.setPassword("secret45);
+		return dataSource;
+	}
+}
+
+
+(C) Create the Application by using (A) and (B)
+	//Create application from configuration
+	ApplicationContext context = SpringApplication.run(ApplicationConfig.class);
+	
+	//Look up the application service interface (Bean ID here is based on Method name from (B) Configuration Instruction)
+	TransferService service = (TranserService) context.getBean("transferService");
+	
+	//Use the application
+	service.transfer(new MonetaryAmount("300.00"),"1","2");
+
+
+-	Spring separates application configuraiton from application objects
+-	Spring manages your application objects
+	Creating them in the correct order
+	Ensuring they are fully initialized before use
+-	Each bean has unique id/name
+
+(2) How many ways to access Spring Bean
+	Multiple ways
+
+	ApplicationContext context = SpringApplication.run(...);
+
+	//Classic way: cast is needed
+	TransferServices ts1 = (TransferService) context.getBean("transferService");
+	
+	//Use typed method to avoid cast	
+	TransferService ts2 = context.getBean("transferSer", TransferService.class);
+	
+	//No need for bean id if type is unique
+	TransferService ts3 = context.getBean(TransferService.class);
+	
+	
+(3) Bean Descriptions:
+
+	It allows you to provide helpful information about any bean
+	
+	Example:
+	@Bean
+	@Descripiton("Handles all transfer related use-cases)
+	public TransferService trnaferService() {...}
+	
+	@Bean
+	@Description("Provides access to data from the Accounts table")
+	public AccountRepository accountRepository() {...}
+	
+
+(4) Spring Application Context:
+	Spring application context can be bootstrapped in any environment, including
+	-	JUnit test
+	-	Web application
+	-	Standalone application
+	
+	-	JUnit test Application Context:
+	public class TransferServiceTests {
+		private TransferService service;
+		
+		@Before
+		public void setUp() {
+			//Creating the application from the configuration [Bootstraps the test]
+			ApplicationContext context = SpringApplication.run(Applicaiton.class);
+			//Look up the application service interface
+			service = context.getBean(TransferService.class);
+		}
+		
+		@Test
+		public void moneyTransfer() {
+			Confirmation receipt = service.transfer(new MonetaryAmount("300"),"1","2");
+			Assert.assertEquals("500.00",receipt.getNewBalance());
+		}
+	}
+		
+	-	Web/Standalone application Application Context:
+	Using just single java file you can create configuration but @configuration class can get very long. 
+	Instead using multiple configuration files combines with @Import.
+	Define a single Application Context, with beans sourced from multiple files
+	For example,
+	@Configuration
+	@Import({InfrastructureCofig.class, WebConfig.class})
+	public class ApplicaitonConfig {
+		...
+	} 
+	
+	@Configuration
+	public class InfrastructureConfig {
+		...		
+	} 
+	
+	@Configuration
+	public class WebConfig {
+		...
+	}
+	
+	-	Organize your @Configuraiton classes however you like but best practice is to separate out "application" beans from
+		"infrastructure" beans.
+		
+		Application bean combine with Infrastructure bean in one single file:
+		Mixed Configuration:
+		@Configuration
+		public class ApplicaitonConfig {
+			@Bean
+			public TransferService transferService() {
+				return new TransferServiceImpl(accountRepository());
+			}
+			@Bean
+			public AccountRepository accountRepository() {
+				return new JdbcAccountRepository(dataSource());
+			}
+			@Bean
+			public DataSource dataSource() {
+				BasicDataSource dataSource = new BasicDataSource();
+				dataSource.setDriverClassName("org.postgresql.Driver");
+				dataSource.setUrl("jdbc:postgresql://localhost/transfer");
+				dataSource.setUserName("tranfer-app");
+				dataSource.setPassword("secret45");
+				return dataSource;
+			}
+		}
+		
+		Separate out Application bean from Infrastructure bean by creating multiple class file.
+		There are multiple ways to separate out.
+		1) Partitioning Configuration:
+		[Infrastructure Beans]
+		@Configuraiton
+		@Import(ApplicationConfig.class)
+		public class InfrastructureConfig {
+			@Bean
+			public DataSource dataSource() {
+				BasicDataSource dataSource = new BasicDataSource();
+				dataSource.setDriverClassName("org.postgresql.Driver");
+				dataSource.setUrl("jdbc:postgresql://localhost/transfer");
+				dataSource.setUserName("tranfer-app");
+				dataSource.setPassword("secret45");
+				return dataSource;
+			}
+		}
+		[Application Beans]
+		@Configuraiton
+		public class ApplicaitonConfig {			
+			@Autowired DataSource dataSource;			
+			
+			@Bean
+			public TransferService transferService() {
+				return new TransferServiceImpl(accountRepository());
+			}
+			@Bean
+			public AccountRepository accountRepository() {
+				return new JdbcAccountRepository(dataSource);
+			}			
+		}		
+		
+		2) Referencing Beans Defined in Another File:
+		-	Use @Autowired to reference a bean defined elsewhere
+		-	Using parameterized constructor argument
+		@Configuraiton
+		public class ApplicaitonConfig {
+			private final DataSource dataSource;
+			
+			@Autowired
+			public ApplicaitonConfig(DataSource dataSource) {
+				this.dataSource = dataSource;
+			}	
+		
+			@Bean
+			public TransferService transferService() {
+				return new TransferServiceImpl(accountRepository());
+			}
+			@Bean
+			public AccountRepository accountRepository() {
+				return new JdbcAccountRepository(dataSource);
+			}
+		}
+		
+		3) Referencing Dependencies Via Arguments
+		-	Using @Bean method arguments
+		-	Spring finds bean that matches type and populates the argument
+		@Configuraiton
+		public class ApplicaitonConfig {
+			@Bean
+			public TransferService transferService() {
+				return new TransferServiceImpl(accountRepository());
+			}
+			@Bean
+			public AccountRepository accountRepository(DataSource dataSource) {
+				return new JdbcAccountRepository(dataSource);
+			}
+		}
+		
+		BUT AVOID "TRAMP DATA" WAY:
+		@Configuraiton
+		public class ApplicaitonConfig {
+			@Bean
+			public AccountService accountService(DataSource dataSource) {
+				return new AccountService(accountRepository(dataSource));
+			}
+			@Bean
+			public AccountRepository accountRepository(DataSource dataSource) {
+				return new JdbcAccountRepository(dataSource);
+			}
+		}
+		BETTER PASS ACTUAL DEPENDENCY
+		@Configuraiton
+		public class ApplicaitonConfig {
+			@Bean
+			public AccountService accountService(AccountRepository accountRepository) {
+				return new AccountService(accountRepository);
+			}
+			@Bean
+			public AccountRepository accountRepository(DataSource dataSource) {
+				return new JdbcAccountRepository(dataSource);
+			}
+		}
+		
+	-	Beware Duplicate Beans
+		It is not illegal to define the same bean more than once. In this case you will get LAST bean.
+		You can use @Order annotation to control which order @Bean methods run
+		@Configuration
+		public class Config1 {
+			@Bean
+			public String example() {
+				return new String("example 1");
+			}
+		}		
+		@Configuration
+		public class Config2 {
+			@Bean
+			public String example() {
+				return new String("example 2");
+			}
+		} 
+		@Import({Config1.class, Config2.class})
+		public class TestApp {
+			public static void main(String[] args) {
+				ApplicationContext context = SpringApplication.run(TestApp.class);
+				System.out.println("Id=" + context.getBean("example"));
+			}
+		}
+		// Console output : Id=example 2
+
+-	Bean Scope:
+
+	Common Spring Scopes:
+		singleton 	-	A single instance is used
+		prototype	-	A new instance is created each time the bean is referenced
+		session		-	A new instance is created once per user session (web environment only)
+		request		-	A new instance is created once per request (web environment only)
+	Other Scopes:
+		-	Web Socket scope
+		-	Refresh Scope
+		-	Thread Scope
+	Custom Scopes (rarely):
+		-	You define a factory for creating bean instances
+		-	Register to define a custom scope name
+			
+	Two most commonly used scope:
+	-	Singleton
+	-	Prototype
+	
+	-	Singleton:
+		Default scope is Singleton
+		
+		@Bean
+		public AccountService accountService() {
+			return new AccountService();
+		}
+		Equivalent to
+		@Bean
+		@Scope("singleton")
+		public AccountService accountService() {
+			return new AccountService();
+		}
+		
+		AccountService service1 = (AccountService) context.getBean("accountService");
+		AccountService service2 = (AccountService) context.getBean("accountService");
+		
+		assert service1 == service2 	// True - same objects
+	
+	-	Prototype
+		New instance created every time bean is referenced
+		@Bean
+		@Scope("prototype") OR @Scope(scopeName="prototype") 
+		public AccountService accountService() {
+			return new AccountService();
+		}
+		
+		AccountService service1 = (AccountService) context.getBean("accountService");
+		AccountService service2 = (AccountService) context.getBean("accountService");
+		
+		assert service1 != service2 	// True - different objects
+		
+-	Dependency Injection:
+	-	It helps by allowing your objects to do what it needs to do without worrying about it dependencies. Frameworks provides required dependency.
+
+	
+		
