@@ -1,0 +1,234 @@
+Topic in this file:
+	-	Use of External Properties to control Configuration
+	-	Demonstrate the purpose of Profiles
+	-	Usage of Spring Expression Language (SpEL)
+
+-	External Properties:
+	Consider the Infrastructure Bean DataSource:
+	@Bean
+	public DataSource dataSource() {
+		BasicDataSource dataSource = new BasicDataSource();
+		dataSource.setDriverClassName("org.postgresql.Driver");
+		dataSource.setUrl("jdbc:postgresql://localhost/transfer");
+		dataSource.setUserName("tranfer-app");
+		dataSource.setPassword("secret45");
+		return dataSource;
+	}
+	
+	Its difficult to maintain connection parameters in code. If username or password changed, again need to modify code and deploy.
+	Better to put them in external file. These files are called properties file which holds connection or any configuration related data.
+	These properties values are easily externalize using Spring's Environment    
+	
+	Environment object used to obtain properties from runtime environment:
+	Properties from many sources:
+		-	JVM System Properties
+		-	Java Properties Files
+		-	Servlet Context Parameters
+		-	System Environment Variables
+		-	JNDI
+	
+	-	Including external properties using @PropertySource
+		@PropertySource - use to add external property file
+		Available resource prefixes: classpath:, ftp: and http:
+		
+		Example:
+		@configuration
+		@PropertySource("classpath:/com/organization/config/app.properties")
+		@PropertySource("file://config/local.properties")
+		public class ApplicationConfig {
+			...
+		}
+		
+	-	Accessing Properties using @Value
+		@Configuration
+		public class DbConfig {
+			@Bean
+			public DataSource dataSource( 
+				@Value("${db.driver}")	String driver,
+				@Value("${db.url}")	String url,
+				@Value("${db.user}")	String user,
+				@Value("${db.password}")	String pwd) {
+				BasicDataSource ds = new BasicDataSource();
+				ds.setDriverClassName(driver);
+				ds.setUrl(url);
+				ds.setUser(user);
+				ds.setPassword(pwd);
+				return ds;
+			}
+		}
+		
+	-	Evaluating ${...} Variables [Spring Boot does this for you automatically]
+		${...} variables are evaluated by a dedicated Spring bean called - PropertySourcePlaceholderConfigurer
+		This mean should be a static bean
+		${...} variables are not resolved unless this bean declared
+		Declaration:
+		@Bean
+		public static PropertySourcePlaceholderConfigurer pspc() {
+			return new PropertySourcePlaceholderConfigurer();
+		}
+		
+	-	${...} Placeholders
+		${...} placeholders in a @PropertySource are resolved against existing properties
+		@PropertySource("classpath:/com/acme/config/app-${ENV}.properties")
+		app-dev.properties:
+			db.driver=org.postgresql.Driver
+			db.url=jdbc:postgresql://localhost/transfer
+			db.user=transfer-app
+			db.password=secret45
+		app-qa.properties:
+			db.driver=org.postgresql.Driver
+			db.url=jdbc:postgresql://localhost/transfer
+			db.user=transfer-app
+			db.password=secret88		
+		app-prod.properties:
+			db.driver=org.postgresql.Driver
+			db.url=jdbc:postgresql://localhost/transfer
+			db.user=transfer-app
+			db.password=secret99
+
+-	Profiles
+	Profiles are used to group the set of Beans.
+	Beans can be grouped into profiles
+	-	Profiles can represent purpose: "web", "offline"
+	-	Profiles can represent environment: "dev", "qa", "uat", "prod"
+	-	Beans included/excluded based on profile membership
+	
+	In Application Context, all beans are located either individually on in a group under some profile. 
+	- Beans with no profile always available
+	
+	-	Defining Profile - 1
+		@Profile annotation used to define profile on configuration class. All beans in configuration belong to the profile
+		Example:
+		@Configuration
+		@Profile("dev")
+		public class DevConfig {
+			@Bean
+			public DataSource dataSource() {
+				EmbeddedDatabaseBuilder builder = new EmbeddedDatabaseBuilder();
+				return builder.setName("testdb")
+							.setType(EmbeddedDatabaseType.HSQL)
+							.addScript("classpath:/testdb/schema.db")
+							.addScript("classpath:/testdb/test-data.db").build();
+			}
+			...
+		}
+	-	Defining Profile - 2
+		@Profile annotation on @Bean methods
+		Example:
+		@Configuration		
+		public class DataSourceConfig {
+			@Bean(name="dataSource)
+			@Profile("dev")
+			public DataSource dataSourceForDev() {
+				EmbeddedDatabaseBuilder builder = new EmbeddedDatabaseBuilder();
+				return builder.setName("testdb")
+							.setType(EmbeddedDatabaseType.HSQL)
+							.addScript("classpath:/testdb/schema.db")
+							.addScript("classpath:/testdb/test-data.db").build();
+			}
+			
+			@Bean(name="dataSource)
+			@Profile("prod")
+			public DataSource dataSourceForProd() {
+				BasicDataSource dataSource = new BasicDataSource();
+				...
+				return dataSource;
+			}
+			...
+		}
+		Here both profiles are define under same bean id - dataSource so only one profile should be activated at a time.
+		Also, noticed Explicit bean-name [@Bean(name="dataSource)] specified to overrides method name
+		
+	-	How to Activate Profiles
+		Profiles must be activated at run-time
+		-	System property via command line
+			-Dspring.profiles.active=dev,jpa
+			
+		-	System property programmatically
+			System.setProperty("spring.profiles.active","dev,jpa");
+			SpringApplication.run(AppConfig.class);		
+		
+		-	Integration Test only: @ActiveProfiles
+		
+	- Property Source selection based on Profile
+		-	@Profile can control which @PropertySource are included in the Environment
+		Examples:
+		@Configuration
+		@Profile("dev")
+		@PropertySource("dev.properties")
+		public class DevConfig {
+			...
+		}
+		dev.properties:
+		db.driver=org.postgresql.Driver
+		db.url=jdbc:postgresql://localhost/transfer
+		db.user=transfer-app
+		db.password=secret45
+		
+		@Configuration
+		@Profile("prod")
+		@PropertySource("prod.properties")
+		public class DevConfig {
+			...
+		}
+		prod.properties:
+		db.driver=org.postgresql.Driver
+		db.url=jdbc:postgresql://localhost/transfer
+		db.user=transfer-app
+		db.password=secret99
+		
+-	Spring Expression Language (SpEL)
+	SpEL for short - Based on Unified Expression Language used by JSP and JSF
+	Expression Language Attribute can be:
+		-	Spring beans
+		-	Implicit reference like spring's environment variable, System Properties, System Environment variables
+	SpEL allows to create custom functions and references
+		-	Widely used in Spring projects like:
+			-	Spring Security, Spring WebFlow
+			-	Spring Batch, Spring Integration 
+	SpEL examples - using @Value
+	@Configuration
+	public class TaxConfig {
+		//Option 1
+		@Value("#{systemProperties['user.region']}") String region;
+		@Bean
+		public TaxCalculator taxCalculator1() {
+			return new TaxCalculator(region);
+		}
+		
+		//Option 2
+		@Bean
+		public TaxCalculator taxCalculator2(@Value("#{systemProperties['user.region']}") String region, ...) {
+			return new TaxCalculator(region);
+		}
+	}
+	
+	-	Accessing Properties
+	SpEL can use to access properties via the environment
+	
+	These are equivalent
+	@Value("${daily.limit}")
+	int maxTransferPerDay;
+	
+	@Value("#{environment['daily.limit']}")
+	int maxTransfersPerDay;
+	
+	Properties are Strings so may need to cast in expression:
+	Example:
+	@Value("#{new Integer(environment['daily.limit'])*2}")
+	@Value("#{new java.net.URL(environment['home.page']).host}")
+	
+	-	Fallback Values
+	Providing a fall-back value
+	If daily.limit undefined, use color:
+	@Autowired
+	public TransferServiceImpl(@Value("${daily.limit:100000}") int max) {
+		this.maxTransferPerDay = max;
+	}
+	For SpEL, use the "Elvis" operator ?:
+	@Autowired
+	public TransferServiceImpl(@Value("#{environment['daily.limit']?:100000}") int max) {
+		this.maxTransferPerDay = max;
+	}
+	x?:y is short for x != null ? x:y
+	
