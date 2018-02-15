@@ -3,7 +3,7 @@ Topic in this file:
 	-	Access Beans in the Application Context
 	-	Handle multiple Configuration files
 	-	Handle dependencies between Beans
-	-	Explain and define Bean Scopes
+	-	Explain and define Bean Scopes. How Java Configuration implements Singleton Beans
 	
 (1)	How Spring works?
 
@@ -332,7 +332,32 @@ public class ApplicationConfig {
 		AccountService service2 = (AccountService) context.getBean("accountService");
 		
 		assert service1 == service2 	// True - same objects
-	
+		
+		How Singleton make sure to return same objects? How Spring Java Configuration implements Singleton Beans?
+		At startup of spring application, each spring bean's subclass is created. These subclass performs scope-control.
+		This subclass just make super call on parent class for the first time invocation. All subsequent call returns bean from 
+		Application Context as singleton instance is cached by the Application Context
+		For Example:
+		@Configuration
+		public class AppConfig {
+			@Bean
+			public AccountRepository accountRepository() {	...	}
+			@Bean
+			public TransferService transferService() {	...	}			
+		}
+		Internally subclass is created. Inheritance-based subclass is the entry point 
+		public class AppConfig$$EnhancerByCGLIB$ extends AppConfig {
+			public AccountRepository accountRepository() {
+				// Here if the bean is in the application context then returns bean
+				// Else calls super.accountRepository() to get the bean, stored in Application Context and return
+			}
+			public TransferService transferService() {
+				// Here if the bean is in the application context then returns bean
+				// Else calls super.accountRepository() to get the bean, stored in Application Context and return	
+			}
+		}
+		Java Configuration uses "cglib" for Inheritance-based subclass
+		
 	-	Prototype
 		New instance created every time bean is referenced
 		@Bean
