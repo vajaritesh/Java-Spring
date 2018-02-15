@@ -1,0 +1,546 @@
+Topic in this file:
+	-	Write Bean definitions using XML
+	-	Create Spring Application Context using XML
+	-	Use XML Attributes to Control Bean Behavior
+	-	Purpose of FactoryBean and usage of it
+	-	Configure Spring XML using Namespaces
+	 
+- XML Configuration:
+	- XML based Configuration is the original form of Configuration/Dependency Injection since 2004 and till now fully supported in Spring.
+	- Most common seen in existing legacy code, older blogs and books
+	- Its a external form of explicit Configuration similar to Java code base Configuration.
+	
+	Both Java code base and XML base configuration both explicit configuration and maintain separation of concert as opposed to Annotation base Configuration.
+	
+	Here is the both Java based and XML based Configuration:
+	
+	Java Based Configuration:
+	@Configuration
+	@Profile("prod")	<-- Profile
+	public class AppConfig {
+		@Bean
+		public TransferService transferService() {
+									^
+								Bean Id		
+			TransferService service = new TransferServiceImpl();
+			service.setRepository(accountRepository());
+										^
+									Dependency Injection	
+			return service;
+		}
+		
+		@Bean(name="accountRepository")
+						^
+					Bean Id	
+		public AccountRepository accountRepository() {
+			...
+		}		
+	}
+	
+	XML Configuration File:
+	<beans profile="prod">
+					^
+					Profile
+		<bean id="transferService" class="com.acme.TransferServiceImpl">
+						^
+					Bean Id	
+			<propety name="accountRepository" ref="accountRepository" />
+														^
+													Dependency Injection			
+		</bean>
+		<bean id="accountRepository" class="com.acme.JdbcAccountRepository">
+			...
+		</bean>
+	</beans>
+	
+- Constructor Based Injection Configuration using XML:
+	- One Parameter:
+		<bean id="transferService" class="com.acme.TransferServiceImpl">
+			<constructor-arg ref="accountRepository">
+										^
+									bean Id		
+		</bean>
+		<bean id="accountRepository" class="com.acme.AccountRepositoryImpl">
+	- Multiple Parameters:
+		<bean id="transferService" class="com.acme.TransferServiceImpl">
+			<constructor-arg ref="accountRepository">	[Parameters injected based on their type]
+			<constructor-arg ref="customerRepository">
+		</bean>
+		<bean id="accountRepository" class="com.acme.AccountRepositoryImpl">
+		<bean id="customerRepository" class="com.acme.CustomerRepositoryImpl">
+
+	Constructor Injection using XML and Java Code Configuration
+	XML:
+		<bean id="service" class="com.acme.ServiceImpl">
+			<constructor-arg ref="repository" />
+		</bean>
+		<bean id="repository" class="com.acme.RepositoryImpl" />	
+	Equivalent in Java:
+		@Bean	
+		public ServiceImpl service() {
+			return new ServiceImpl(repository())
+		}
+		@Bean
+		public RepositoryImpl repository() {
+			return new RepositoryImpl();
+		}
+	
+- Setter Method Based Injection:
+	XML:
+		<bean id="service" class="com.acme.ServiceImpl">
+			<property name="repository" ref="repository" />
+												^
+										Convention: implicitly refer to method setRepository(...)		
+		</bean>
+		<bean id="repository" class="com.acme.RepositoryImpl" />	
+	Equivalent in Java:
+		@Bean	
+		public ServiceImpl service() {
+			Service service = new ServiceImpl();
+			service.setRepository(repository());
+			return service;
+		}
+		@Bean
+		public RepositoryImpl repository() {
+			return new RepositoryImpl();
+		}
+
+- Combining Constructor and Setter Injection:
+	XML:
+		<bean id="service" class="com.acme.ServiceImpl">
+			<constructor-arg ref="required" />
+			<property name="optional" ref="optional">
+		</bean>
+		<bean id="required" class="com.acme.RequiredImpl" />
+		<bean id="optional" class="com.acme.OptionalImpl" />
+	Equivalent in Java:
+		@Bean public RequiredImpl required() { ... }
+		@Bean public OptionalImpl optional() { ... }
+		@Bean public ServiceImpl service() {
+			ServiceImpl service = new ServiceImpl(required());
+			service.setOptional(optional());
+			return service;
+		}
+	
+- Injecting Scalar Values
+	XML:
+	<bean id="service" class="com.acme.ServiceImpl">
+		<property name="stringProperty" value="foo" /> equivalent to <property name="stringProperty"><value>foo</value></property>
+	</bean>
+	Java:
+	public class ServiceImpl {
+		public void setStringProperty(String s) { ... } 
+		// ...
+	} Equivalent to: 
+	@Bean
+	public ServiceImpl service() {
+		ServiceImpl svc = new ServiceImpl();
+		svc.setStringProperty("foo");
+		return svc;
+	}
+
+- Automatic Value Type Conversion
+	Spring can convert: 
+		Numeric types BigDecimal, 
+		boolean: "true", "false"
+		Date
+		Locale
+		Resource
+	XML:		
+		<bean id="service" class="com.acme.ServiceImpl">
+			<property name="intProperty" value="29" />
+		</bean>
+	Java:
+		public class ServiceImpl {
+			public void setIntProperty(int i) { ... }
+			// ...
+		}
+	Equivalent to:
+	@Bean
+	public ServiceImpl service() {
+		ServiceImpl svc = new SerivceImpl();
+		int val = // Integer parsing logic, 29.
+		svc.setIntProperty(val);
+		return svc;
+	}
+	
+- Creating Application Context using XML:
+	In Java Configuration class file use @ImportResource to define XML file. Multiple XML files can be added using @ImportResource.
+	Valid Prefix are: classpath: (default), ftp: and http:
+	Example:
+		SpringApplication.run(MainConfig.class)
+		
+		@Configuration
+		@ImportResource({"classpath:com/acme/application-config.xml", "file:C:/Users/alex/application-config.xml"})
+		@Import(DatabaseConfig.class)	<-- Can combine with @Configuration imports
+		public class MainConfig {
+			...
+		} 	
+	Java:
+	@Configuration
+	@Import(DatabaseConfig.class)
+	public class MainConfig {	...	}	
+	XML:
+	<beans>
+		<import resource="db-config.xml" />	<-- Use Relatively path by default and same prefix available (file, classpath, http)
+	</beans>
+	
+- Alternative way of Creating Application Context
+	-	So far we have seen application context created like this:
+		ApplicationContext context = SpringApplicatin.run(MainConfig.class);
+		-	This is actually Spring Boot class and it works very well with Spring application
+		
+	-	Older "classic" way of Creating ApplicationContext:
+		-	Load Java Configuration class:
+				new AnnotationConfigApplicationContext(MainConfig.class)
+		-	Load from $CLASSPATH/com/acme/application-config.xml:
+				new ClassPathXmlApplicationContext("com/acme/application-config.xml");
+		-	Load from absolute path: C:/Users/alex/application-config.xml:
+				new FileSystemXmlApplicationContext("C:/Users/alex/application-config.xml");
+		-	Load from path relative to the JVM working directory:
+				new FileSystemXmlApplicationContext("./application-config.xml");
+				
+- Controlling Bean Behavior:
+	- @PostConstruct  == init-method in XML
+		Java:
+			@PostConstruct
+			public void setup() {	
+				...	
+			}
+		XML:
+			<bean id="accountService" class="com.acme.ServiceImpl" init-method="setup">
+				...
+			</bean>
+		
+		Note- Same rule as Java, init-method can have any visibility but must not take any argument and return type must be void. 
+		  	  Called after dependency injection.
+		  
+	- @PreDestroy == destroy-method in XML
+		Java:
+			@PreDestroy
+			public void tearDown() {
+				...
+			}
+		XML:
+			<bean id="Service" class="com.acme.ServiceImpl" destroy-method="teardown">
+				...
+			</bean>
+		Note- Same rule as Java, destroy-method can have any visibility but must not take any argument and return type must be void.
+	
+	- Bean Scope:
+		@Scope == "scope" attribute in XML
+		Java:
+			@Bean
+			@Scope("prototype")
+			public AccountService accountService() {
+				return ...
+			}
+			@Component
+			@Scope("prototype")
+			public class AccountServiceImpl {
+				...
+			}
+		Same options available in XML
+			-	singleton, prototype, request, session, (custom) 
+		XML:
+			<bean id="accountService" class="com.acme.ServiceImpl" scope="prototype">
+				...
+			</bean>
+			
+	- @Lazy Annotation:
+		@Lazy == "lazy-init" in XML
+		Java:
+			@Bean
+			@Lazy("true")
+			public AccountService accountService() {
+				return ...
+			}
+			@Component
+			@Lazy("true")
+			public class AccountServiceImpl {
+				...
+			}
+		XML:
+		<bean id="accountService" class="com.acme.ServiceImpl" lazy-init="true">
+			...
+		</bean>
+		
+	- Profile Configuration in XML:
+		-	All Bean Definition
+			<bean xmlns=http://www.springframework.org/schema/beans...
+				profile="dev"> ... </beans>
+					^
+				Profile applied to all the beans in this file
+				
+		-	Subset of bean definition: Mixed subset of profile beans
+			<beans xmlns=http://www.springframework.org/schema/beans...>
+				<bean id="rewardNetwork" ... />	<--	Available to all profiles
+				<beans profile="dev"> ... </beans>	<-- All beans are of Dev profile
+				<beans profile="prod"> ... </beans>	<-- All beans are of Prod profile
+			</beans>
+
+- Advanced XML Bean Instantiation:
+	-	Conditional Configuration:
+		Conditional Configuration easily done using Java Code base configuration but difficult using XML
+		-	@Bean methods can use any Java code like:
+			-	Use If-Else condition, For/While loop
+		There is no such equivalent in XML. XML didn't implemented <if> or <for-each> tag
+		So Spring XML relies on the Factory Pattern
+			-	Use a factory to create the beans
+			- 	Put any complex java code needed in the factory's internal logic
+			
+	-	Spring FactoryBean Interface:
+		Spring FactoryBean interface help writing complex configuration for XML
+		Spring FactoryBean interface used long before @Bean introduced. Some Java Code base configuration also used FactoryBean interface.
+		
+		Example:
+		public class AccountServiceFactoryBean implements FactoryBean<AccountService>	{
+			public AccountService getObjects() throws Exception {
+				//Conditional logic: For example, selecting right implementation or sub-class of AccountService to create
+				return accountService;
+			}
+			public boolean isSingleton() {	return true;	}
+			public Class<?> getObjectType() {	return AccountService.class;	}
+			
+		}
+		XML: <bean id="accountService" class="com.acme.AccountServiceFactoryBean" />
+		
+		-	Beans implementing FactoryBean interface are auto-detected.
+		-	Dependency injection using the factory bean id causes getObject() to be invoked transparently.
+		Example:
+		<bean id="accountService" 	class="com.acme.AccounterServiceFactoryBean" />
+		<bean id="customerService" class="com.acme.CustomerServieImpl">
+			<property name="service" ref="accountService" />
+												^
+											getObject() called by Spring Internally 		
+		</bean>
+		
+	-	Spring FactoryBean Interface with Java Configuration
+		-	works exactly same way as XML
+		@Configuration
+		public class ServiceConfig {
+			@Bean
+			public AccountServiceFactoryBean accountService()	{
+				return new AccountServiceFactoryBean();
+			}
+			@Bean
+			public CustomerService customerService(AccountService accountService) {
+				return new CustomerService(accountService);
+			}
+		}
+		Here, AccountServiceFactoryBean creates AccountService. getObject() called by Spring internally which will return  accountService.
+		
+	-	FactoryBeans are widely used in Spring:
+		-	EmbeddedDatabaseFactoryBean
+		-	JndiObjectFactoryBean
+		-	Creating Remoting proxies
+		-	Creating Caching proxies
+		-	For configuring data access technologies like:
+				JPA, Hibernate or MyBatis
+	-	FactoryBeans often hidden behind the namespace in XML
+
+-	XML Namespace:
+	-	The default namespace in a Spring configuration file is typically the "beans" namespace:
+		￼<?xml version="1.0" encoding="UTF-8"?>
+		<beans xmlns="http://www.springframework.org/schema/beans"
+			xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+			xsi:schemaLocation="
+				http://www.springframework.org/schema/beans
+				http://www.springframework.org/schema/beans/sping-beans.xsd>
+			<!--	....	-->
+		</beans>
+		Dozen of other namespaces are available
+	-	Other Namespace:
+		-	aop (Aspect Oriented Programming)
+		-	tx (transactions)
+		-	util
+		-	jms
+		-	context
+		-	...
+	-	These namespace allow hiding of actual bean definitions
+	-	Define "programming instruction" for bean files
+	-	Greatly reduce size of bean files
+	
+		-	Namespace Example -1 : In-Memory DataStore using Beam XML
+			Creating an in-memory test database
+			<bean id="dataSource" class="org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseFactoryBean">
+															^
+														Factory Bean	
+				<property name="databasePopulator" ref="popular" />
+				<property name="databaseType" ref="HSQL" />
+			</bean>
+			<bean id="popular" class="org.springframework.jdbc.datasource.init.ResourceDatabasePopular">
+				<property name="script">
+					<list>
+						<value>classpath:rewards/testdb/schema.sql</value>	<-- Populate with test-data
+						<value>classpath:rewards/testdb/data.sql</value>				
+					</list>
+				</property>
+			</bean>		
+			Beam XML requires two beans and knowledge of the classes being used	
+		-	Namespace Example -1 : In-Memory DataStore using jdbc namespace
+			<jdbc:embedded-database id="dataSource" type="HSQL">
+				<jdbc:script location="classpath:rewards/testdb/schema.db"	/>
+				<jdbc:script location="classpath:rewards/testdb/test-data.db" />
+		 	</jdbc:embedded-database>
+		 	Equivalent to:
+		 	@Bean
+		 	public DataSource dataSource() {
+		 		EmbeddedDatabaseBuilder builder = new EmbeddedDatabaseBuilder();
+		 		return builder.setName("testdb")
+		 				.setType(EmbeddedDatabaseType.HSQL)
+		 				.addScript("classpath:rewards/testdb/schema.db")
+		 				.addScript("classpath:rewards/testdb/test-data.db")
+		 				.build();
+		 	}
+		 	
+		 -	Namespace Example -2 : Property Placeholders:
+		 	-	Property Placeholders define property sources
+		 		-	XML equivalent of @PropertySource
+		 	-	Namespace just an elegant way to hide the underlying bean declaration
+		 		-	same functionality, less typing
+		 	Example:	
+		 		<context:property-placeholder location="db-config.properties" />
+		 							Equivalent to
+		 		<bean class="org.springframework...PropertySourcePlaceholderConfigurer">
+		 			<property name="location" value="db-config.properties" />
+		 		</bean>
+		 		
+		-	Accessing Properties in XML:
+			<bean ....>
+				<context:property-placeholder location="db-config.properties" />
+				<bean id="dataSource" class="com.oracle.jdbc.pool.OracleDataSource">
+					<property name="URL" value="${dbUrl}" 	/>
+					<property name="user" value="${dbUserName}" />
+				</bean>
+			</beans>
+				+
+			db-config.properties:
+				dbUrl=jdbc:oracle:...
+				dbUserName=moneytransfer-app
+				=
+			<bean id="dataSource" class="com.oracle.jdbc.pool.OracleDataSource">
+					<property name="URL" value="jdbc:oracle:..." 	/>
+					<property name="user" value="moneytransfer-app" />
+			</bean>
+		
+		-	XML Profiles and Properties:
+			<import resource="classpath:config/${current.env}-config.xml" />
+			<context:proeprty-placeholder properties-ref="configProps" />
+			<beans profile="dev">
+				<util:properties id="configProps" location="config/app-dev.properties" >  	
+			</beans>
+			<beans profile="prod">
+				<util:properties id="configProps" location="config/app-prod.properties" >
+			</beans>
+			
+			app-dev.properties:
+			current.env=dev
+			database.url=jdbc:derby:/test
+			database.user=tester
+			
+			app-prod.properties:
+			current.env=prod
+			database.url=jdbc:oracle:thin:...
+			database.user=admin
+	
+			Equivalent to:
+			
+			@PropertySource("classpath:/com/acme/config/app-${ENV}.properties")
+			
+			-	Typical Profiles and Namespace Examples:
+			￼￼<beans xmlns=http://www.springframework.org/schema/beans 
+				xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+				xmlns:jdbc=http://www.springframework.org/schema/jdbc 
+				xmlns:jee=http://www.springframework.org/schema/jee 
+				xsi:schemaLocation="...">
+				<beans profile="dev">
+					<jdbc:embedded-database id="dataSource">
+						<jdbc:script location="classpath:com/bank/sql/schema.sql"/>
+						<jdbc:script location="classpath:com/bank/sql/test-data.sql"/>
+					</jdbc:embedded-database>
+				</beans>
+				<beans profile="production">
+					<jee:jndi-lookup id="dataSource" jndi-name="java:comp/env/jdbc/datasource" />
+				</beans>
+			</beans>	
+				
+	-	Power of Namespace:
+		Namespace greatly simplifies Spring Configuration.
+		Many advance features of Spring need to declare	a large numbers of beans. Namespace reduces such beans definition
+		Example:
+		<?xml version="1.0" encoding="UTF-8" ?>
+		<beans ...>
+			<context:property-placeholder location="db-config.properties" />
+							^
+						hides 1 bean definition
+			<aop:aspectj-autoproxy />
+						^
+					AOP Configuration: hides 5+ bean definitions
+			<tx:annotation-drive />
+					^
+					Transaction Configuration: hides more than 15 bean definitions!		
+		</beans>
+	
+	-	@ComponentScan:
+		@Configuration
+		@ComponentScan({"com.acme.app.repository", "com.acme.app.service","com.acme.app.controller"})
+									^
+								Array of Strings	
+		public class MainConfig {
+			...
+		}
+		
+		Availalbe in context namespace:
+		<context:component-scan base-package="com.acme.app.repository, com.acme.app.service,com.acme.app.controller" />
+														^
+													Single String
+														
+		
+	-	XML And Annotation:
+		-	XML supports defining annotated beans
+			- 	just define bean in xml and 
+			-	Let annotation do the rest
+		-	Must enable annotation config
+		Example:
+		<bean id="Service" class="com.acme.ServiceImpl" />
+		<context:annotation-config />	<-- Or automatically enabled by context:component-scan
+		
+		public class ServiceImpl {
+			@Autowired
+			public void ServiceImpl(String s) {	...	}
+			@PostConstruct
+			public void setup() { ... }
+		}
+		
+	-	Namespace declarations are tedious and error pron on typo
+		Jsut for beans, context and jdbc namespace you need:
+		<beans 
+			xmlns="http://www.springframework.org/schema/beans" 
+			xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+			xmlns:jdbc="http://www.springframework.org/schema/jdbc" 
+			xmlns:context="http://www.springframework.org/schema/context"
+			xsi:schemaLocation="http://www.springframework.org/schema/beans 
+				http://www.springframework.org/schema/beans/spring-beans.xsd 
+				http://www.springframework.org/schema/jdbc 
+				http://www.springframework.org/schema/jdbc/spring-jdbc.xsd 
+				http://www.springframework.org/schema/context 
+				http://www.springframework.org/schema/context/spring-context.xsd">
+				
+		-	Fortunately there is an easier way using STS (Spring Tool Suit).
+			-	Use whatever namespace you need by selecting STS XML editor Namespace tab. 
+			
+	-	Schema Version Numbers
+		spring-beans-4.2.xsd	OR	spring-beans.xsd	
+		-	Common Practise: do not use schema version number 
+		
+- Spring XML Best Practices:
+	-	XML has been around for the log time
+	-	Many shortcuts and useful technique exits like:
+		-	Singleton and Factory Beans
+		-	Bean Definition Inheritance
+		-	Inner Beans
+		-	p and c namespaces
+		-	Using collections as Spring beans				
+
+
