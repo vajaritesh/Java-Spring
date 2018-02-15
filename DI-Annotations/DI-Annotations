@@ -1,0 +1,317 @@
+Topic in this file:
+	-	Explain and use Annotation-based Configuration
+	-	Use @PostConstruct and @PreDestroy
+	-	Explain and use Spring's Stereotype and Custom Annotation using Meta Data
+	
+	
+-	Annotation Based Configuration
+	-	Before Annotation Based Configuration, Configuration was external to Bean class using Java Based Dependency Injection.
+		It is Explicit bean definition. 
+		For Example:
+		@Configuration
+		public class TransferModuleConfig {
+			@Bean
+			public TransferService transferService() {
+				return new TransferService(accountRepository());
+													^
+												(Dependency Injection)	
+			}
+			@Bean
+			public AccountRepository accountRepository() {
+				return new AccountRepository();
+			}
+		}
+	-	Annotation Based Configuration within Bean class. Configuration is part of Bean class using @Autowired annotation.
+		It is Implicit Configuration.
+		For Example:
+		@Compponent
+		public class TransferServiceImpl implements TransferService {
+							^
+							Bean Id Derived from classname: transferServiceImpl	
+			@Autowired
+			public TransferServiceImpl(AccountRepository repo) {
+				this.accountRepository = repo;
+			}
+		}
+		@Configuration
+		@ComponentScan("com.bank")	<--- Find @Component classes within given packages including subpackages 
+		public class AnnotationConfig {
+			//No bean definition needed any more
+		}
+		
+		Spring Bean can be define Explicitly using @Bean methods or Implicitly using @Component and component-scanning.
+		Most application uses both Implicit for your classes and Explicit for the rest
+-	What is @Autowired? Different way of use of @Autowired
+	There are mainly 3 different way, dependency can be injected using @Autowired. 
+	In of the way, it is important to make sure unique dependency of correct type must exits.
+	1)	Constructor Based Injection
+		@Autowired
+		public TransferServiceImpl(AccountRepository repo) {
+			this.accountRepository = repo;
+		}
+	2)	Setter Method Based Injection
+		@Autowired
+		public void setAccountRepository(AccountRepository repo) {
+			this.accountRepository = repo;
+		}
+	3)	Field Based Injection
+		@Autowired
+		private AccountRepository repo;
+		(Even field with Private, injection happens thought difficult to unit test)
+		
+	By Default, @Autowired dependency is required. And if dependency not found or resolved, Exception is generated. 
+	In above example, If AccountRepository (Interface) not available then exception is thrown.
+	Use "required" attribute of @Autowired to override the default behavior
+	For Example,
+		@Autowired(required=false) <-- only inject if dependency exits
+		public void setAccountRepository(AccountRepository repo) {
+			this.accountRepository = repo;
+		}
+	Another way to inject optional dependencies by using Optional<T> from Java 8
+	For Example,
+	Java 7 way of Optional dependency:		Java 8 way of Optional dependency (use of lamda expression):
+	@Autowired(required=false)				@Autowired
+	AccountService accountService;			Optional<AccountService> accountService;
+	public void doSomething() {				public void doSomething() {		
+		if(accountService!=null) {				accountService.ifPresent(s-> {
+			//do something							//s is AccountService instance use to do something
+		}										});
+	}										}
+	
+-	Constructor Vs Setter Dependency Injection
+	Spring doesn't care which one to use. Here are the difference:
+		Constructor								Setters
+	Mandatory dependencies					Optional/Changeable dependencies
+	Immutable dependencies					Circular dependencies
+	Concise (pass several params at once)	Inherited automatically
+											If constructor needs too many params
+											
+	Similar to Java Standards 
+	-	Be consistent across your project to use either Constructor based or Setter based
+	-	Many classes use both to avoid Circular dependencies. 
+		i.e A depends on B, B depends on A
+
+- What are the disadvantages of using @Autowried for dependency injection
+	-	@Autowired bean ambiguity occurs when two bean classes implements same interface 
+	For example,
+	@Component
+	public class TransferServiceImpl implements TransferService {
+		@Autowired
+		public TransferServiceImpl(AccountRepository accountRepository) {	...	}
+	}  
+	@Component
+	public class JpaAccountRepository implements AccountRepository {	...	}
+	@Component
+	public class JdbcAccountRepository implements AccountRepository {	...	}
+	
+	Here, which one should get injected for AccountRepository? JpaAccountRepository or JdbcAccountRepository
+	At startup, NoSuchBeanDefinitionException arise. No unique bean of type [AccountRepository] is defined: expected single but found 2.
+	
+	-	@Qualifier annotation
+	Above bean injection ambiguity can be resolved by using @Qualifier annotation.
+	For example,
+	@Component("transferService") <-- Bean Id
+	public class TransferServiceImpl implements TransferService {
+		@Autowired
+		public TransferServiceImpl(@Qualifier("jdbcAccountRepository") AccountRepository accountRepository) {	...	}
+											^
+	}  									Qualifier
+	@Component("jpaAccountRepository")	<-- Bean Id
+	public class JpaAccountRepository implements AccountRepository {	...	}
+	@Component("jdbcAccountRepository") <-- Bean Id
+	public class JdbcAccountRepository implements AccountRepository {	...	}
+	
+	
+	When @Component name not specified: By default it auto generated by De-capitalized non-qualified classname name. 
+	Recommendation: never rely on auto generated classname
+	When @Component name specified: It removes ambiguity when 2 classes implements same interfaces
+	
+	@Qualifier also available with Setter Method Injection and Field Injection.
+	Common Strategy: avoid using qualifiers when possible. Usually its rare to have 2 beans of same type in ApplicationContext
+	
+-	@Autowired using @Value to set attribute:
+	Either $ variables or SpEL use.
+	-	Constructor Based Injection:
+		@Autowired
+		public TransferServiceImpl(@Value("${daily.limit}") int max) {
+			this.maxTransferPerDay = max;
+		} 
+	-	Setter Method Based Injection:
+		@Autowried
+		public void setDailyLimit(@Value("${daily.limit}") int max) {
+			this.maxTransferPerDay = max;
+		}														
+	-	Field Injection
+		@Value("#{environment['daily.limit']}")
+		int maxTransferPerDay;
+		
+-	Delayed Initialization	
+	Beans are created during the server startup when application context created.
+	If Java Configuration has dependency on any Bean and if bean is not yet loaded/created on startup then exception thrown NoSuchBeanDefition.
+	To avoid/resolve this dependency sometime we need to delayed injection process by using @Lazy annotation.
+	Beans with @Lazy annotation are used first time	
+		-	dependency injected.
+		-	By ApplicationContext.getBean methods
+		
+	Also, @Lazy annotation useful if Bean's dependencies not available at startup
+	For example,
+	@Lazy
+	@Component
+	public class MailService {
+		public MailService(@Value("smtp:...") String url) {
+			// connect to mail server
+							^
+						Mail server may not be running when this process start up		
+		}
+	}	
+	
+	
+-	Java Configuration Vs. Annotation Configuration Syntax
+	-	Java Configuration Based:
+		@Configuration
+		public class TransferConfiguration
+			@Bean(name="transferService") 
+			@Scope("prototype")
+			@Profile("dev")
+			@Lazy(false)
+			public TransferService tsvc() { return
+				new TransferServiceImpl( accountRepository());
+			}
+		}
+	-	Annotation Based:
+		@Component("transferService") 
+		@Scope("prototype") 
+		@Profile("dev")	
+		@Lazy(false)
+		public class TransferServiceImpl implements TransferService {
+			@Autowired
+			public TransferServiceImpl(AccountRepository accRep) { ... }
+		}
+		
+-	When to use Java Configuration Vs Annotation?
+	-	Java Configuration:
+		Pros:
+			-	Java Configuration is centralized in one or few places
+			-	Java Configuration written in Java Code, which means by default type checking or syntax checking cover by Compiler			
+			-	Java Configuration is external to Java Classes so once you have configuration setup you can use on any classes
+		Cons:
+			-	More verbose than annotations
+	-	Annotation:
+		Pros:
+			-	Configuration spread across your code base, which makes harder to maintain or debug.
+			-	Annotation is implicit so given configuration works only on given class.
+			-	Merges Configuration and Code which is bad for separate of concern concept.
+			 
+-	Mixing Java Configuration and Annotation
+	Many ways to mix and match both configuration.
+	Here are the common approach:
+		-	Use annotation whenever possible for your classes
+		-	Use Java Configuration for
+			-	Third party beans that aren't annotated
+			-	Legacy code that can't be changed
+
+-	@PostConstruct and @PreDestroy
+	These annotation adds behavior at server startup and shutdown. Spring invokes them during bean creation process.
+	Note - These are not Spring annotations. It defined by JSR-50 and part of Java since Java 6. Its in javax.annotation package.
+	-	@PostConstruct:
+		This method called at startup after all dependency injection. Method at post bean initialization.
+	-	@PreDestroy:
+		This method called at shutdown right before the bean destroy.
+	Examples:
+	public class JdbcAccountRepository {
+		@PostConstruct
+		void populateCache()	{	...	}
+		
+		@PreDestroy
+		void flushCache()	{	...	}
+	}
+	These methods can have any visibility but must not take any argument and return type should be only void.
+	
+	More detailed examples:
+	-	@PostConstruct:
+		@PostConstruct method called after setter method called.
+		public class JdbcAccountRepository {
+			private DataSource dataSource;
+			//Step 1
+			@Autowired
+			public void setDataSource(DataSource dataSource) {
+				this.dataSource = dataSource;
+			}
+			//Step 2
+			@PostConstruct
+			void populateCache() {
+				Connection conn = dataSource.getConnection();
+			}
+		}
+		Here spring first calls constructor -> setter method -> @PostConstruct methods
+		
+	-	@PreDestroy
+		@PreDestroy called when Configurable ApplicationContext is closed
+		-	if application (JVM) exits normally
+		-	useful for releasing resource and 'clean up' activities
+		-	NOT called for prototype beans. @PreDestroy only applicable for Singleton scope bean
+		Example:
+		ConfigurableApplicationContext context = SpringApplication.run(...);
+		//Triggers call of all @PreDestroy annotated methods
+		context.close();
+	 		 ^
+	 	This will cause spring to invoke below flushCache() method
+	 	
+	 	public class JdbcAccountRepository {
+	 		@PreDestroy
+	 		public void flushCache() {
+	 			...
+	 		}
+	 	}
+	 	
+-	Alternatively @Bean has attribute to invoke post-construct and pre-destroy methods without use of Annotation:
+	@Bean (initMethod="populateCache", destroyMethod="flushCache")
+	public AccountRepository accountRepository() {
+		// ...
+	}
+	
+	Common Usage:
+		– 	@PostConstruct/@PreDestroy for your own classes
+		-	@Bean properties for classes you didn't write and can't annotate
+		
+- Stereotype Annotation:
+	@Configuration, @Controller, @Service, @Repository etc. all part of @Component are the Stereotype Annotation in spring.
+	Component Scanning also checks for annotation that are themselves annotated with @Component.
+	
+	@ComponentScan("...")
+					 ^
+					Scans
+	@Service("transferService")										
+	public class TransferServiceImpl implements TransferSerive { ... }
+	
+	Declaration of @Service Annotation:
+	@Target({ElementType.TYPE})
+	...
+	@Component
+	public @interface Service { ... }
+	
+	-	Predefined Stereotype Annotation:
+		-	@Configuration:	Java Configuration
+		-	@Controller:	Web classes (Spring MVC)
+		-	@Service:		Service classes
+		-	@Repository:	Data Access classes
+	Note - Other Spring Project provides their own Stereotype Annotation
+	
+- Meta Annotation:
+	Annotation which can be used to annotate another annotations
+	Example: All services beans should be configurable using component scanning and be transactional
+	@ComponentScan("...")
+					 ^
+					scans
+	@MyTransactionalService
+	public class TransferServiceImpl implements TransferService { ... }
+	
+	Custom Annotation:
+	@Retention(RetensionPolicy.RUNTIME)
+	@Target(ElementType.TYPE)
+	@Service
+	@Transactional(timeout=60)
+	public @interface MyTransactionalService {
+		String value() default "";
+	}
+	
