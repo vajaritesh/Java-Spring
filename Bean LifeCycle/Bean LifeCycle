@@ -1,0 +1,282 @@
+Topic in this file:
+	-	3 Phases of Spring Bean Lifecycle
+	-	Use of BeanFactoryPostProcessor and BeanPostProcessor
+	-	How Spring Proxies add behavior at runtime
+	-	How pre-destroy is implemented
+	 	
+- Phases of Application Life Cycle:
+	Initialization -> Use -> Destruction.
+	1) Initialization:
+		-	Prepares for use
+		-	Application services
+				-	are created
+				-	Configured
+				-	May allocated System Resource
+		-	Application is not usable until this phase is complete
+	2) Use:
+		-	Used by clients
+		-	Application services
+				-	Process client requests
+				-	Carry out application behaviors
+		-	99.99% of time is spent in this phase
+	3) Destruction:
+		-	Shut down
+		-	Application services
+				-	release any system resource
+				-	are eligible for garbase collection
+
+- Spring's role in Application Life Cycle:
+	-	Spring fits in to manages all phases of application life cycle
+		
+	-	Life cycle applies to:
+			-	Any class of application
+				-	Standalone Java or Spring Boot application
+				-	Integration/System Test
+				-	Java EE (web or full profile)
+			-	All 3 dependency injection styles
+				-	XML, Annotations and Java Configuration
+				
+- Initialization Phase:
+	When Spring Application Context created the initialization phase is complete.
+	// Create the application from the configuration
+	ApplicationContext context = SpringApplication.run(AppConfig.class);
+	
+	What exactly happens in this phase?
+	
+	-	Bean Initialization Phase:
+		Server starts -> Load Bean Definitions -> Initialize Bean instances -> Bean Post Processor -> Bean Ready for Use
+		-	Load Bean Definitions:
+			1. Bean Definitions Loaded
+			2. Post Process Bean Definitions
+		-	Initialize Bean Instances:
+			1. Initiate Beans
+			2. Setters Called
+		-	Bean Post Processor (BPP)
+			1. Before Bean Initializer
+			2. Bean Initializer
+			3. After Bean Initializer			
+		
+-	Load Bean Definitions:
+		In this phase, 
+		-	@Configuration classes are processed
+				-	and/or @Components are scanned
+				-	and/or XML files are parsed
+		-	Bean definitions added to BeanFactory
+				-	Each Indexed under Bean Id
+		-	Special BeanFactoryPostProcessor beans invoked
+				-	This can modify the definition of any bean
+				
+		Example:
+			- AppConfig.java
+				@Bean
+				public TransferService transferService() {	... }
+				@Bean
+				public AccountRepository accountRepository() { ... }
+			- TestInfrastructureConfig.java
+				@Bean
+				public DataSource dataSource() { ... }							
+			Application Context BeanFactory:
+				-	transferService
+				-	accountRepository
+				-	dataSource
+					|
+					| postProcess(BeanFactory)
+					V
+				BeanFactoryPostProcessor	<---- Can modify the definition of any bean in the factory before any objects are created	
+						
+		￼-	BeanFactoryPostProcessor Extension:
+			Several useful implementation provided in spring:
+				-	Reading properties, registering custom scope etc.
+			You can write your own BeanFactoryPostProcessor interface (not common)
+				public interface BeanFactoryPostProcessor {
+					public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory);
+				}				 
+		-	Most Common Example of BeanFactoryPostProcessor:
+			-	In @Value annotation and ${..} variables, there is a need of PropertySourcePlaceholderConfigurer to evaluate them.
+				This is a BeanFactoryPostProcessor
+				Example:
+					@Configuration
+					@PropertySource("classpath://config/app.properties")
+					public class ApplicationConfig {
+						@Value("${max.retries}")
+							int maxRetries;
+						...
+					}
+			-	Java Configuration uses Static Beans:
+				To ensure these beans are created without side-effects, they must be defined as static methods
+				Example:
+					-	PropertySourcePlaceholderConfigure
+					@Bean
+					public static PropertySourcePlaceholderConfigure propertySourcePlaceholderConfigure() {
+						return new PropertySourcePlaceholderConfigure();
+					}				
+					Or If using XML,
+					<context:property-placeholder /> creates a PropertySourcePlaceholderConfigurer for you.
+					
+-	Initialize Bean Instances:
+	-	Each bean is eagerly instantiated by default
+		-	Created in right order with its dependencies injected 
+			-	Unless marked as lazy
+	-	Next each bean goes through a post-processing phase
+		-	BeanPostProcessors
+	-	Now the Bean is fully initialized and ready for use
+		-	Tracked by its id until the context is destroyed
+			-	Except Prototype beans
+	
+	-	The Initializer Extension Point:
+		-	Its a special case of a bean post-processor (BPP)
+			-	@PostConstruct methods called
+		-	Internally Spring uses several initializer BPPs
+			-	CommonAnnotationBeanPostProcessor enables initialization
+				-	Also enables @Resource
+				
+	-	The BeanPostProcessor Extension Point:
+		-	An important extension point in Spring
+			-	can modify bean instances in any way
+			-	powerful enabling feature
+		-	Must implement the BeanPostProcessor interface
+			-	Spring provides several implementations
+			-	You can write your own (not common)
+			Example:
+				public interface BeanPostProcessor {
+					public Object postProcessorAfterInitialization(Object bean, String beanName);
+					public Object postProcessBeforeInitializaiton(Object bean, String beanName);
+							^										^
+						Post-processed bean						Original bean
+				}					
+				
+-	Configuration Lifecycle:
+
+						Bean 			Bean			Bean instantiation and dependency injection					Bean
+						Detection		Factory 																	Post
+										Post Processor																Processor
+											|																		|		
+	XML 				Load XML			|			Instantiation &				Property						|
+	Config		--->	Definitions	----------------->	Construction	----------	Injection			------------|-------->
+											|			Injection													|
+											|																		|	
+											|																		|
+											|			Instantiation &				Injection of					|
+	Annotation	--->	@Component	----------------->	@Autowired		----------	@Autowired			------------|-------->
+	Config				Scanning			|			on constructor				methods & fields				|
+											|																		|
+											|																		|
+											|																		|
+											|																		|
+	Java		--->	Read @Bean	----------------->	Call @Bean method implementations				------------|-------->	
+	Config			 	method				|																		|
+						signatures			|																		|
+													
+
+-	The Use Phase:
+		-	When you invoke a bean using ApplicationContext, bean is in use phase
+		-	Example:
+				ApplicationContext context = // get it from somewhere (Java Config. or XML or Annotation)
+				//Lookup the entry point into the application
+				TransferService service = (TranferService) context.getBean("transferService");
+				//Use it
+				service.transfer(new MonetaryAmount("50.00"),"1","2");
+				
+		But exactly what happens in this phase?
+		- 	Inside The Bean Request (Use) Lifecycle:
+			-	The bean is just the raw object
+				-	It is simply invoked directly (nothing special)
+					transfer("50.00","1","2") ---> TransferServiceImpl
+			-	The bean has been wrapped in a 'proxy'
+				-	Things become more interesting
+					transfer("50.00","1","2") ---> Spring Proxy TransferServiceImpl
+					Note - Proxy classes are created in the init phase by dedicated BeanPostProcessors
+					
+		- Why do we need Proxy? Proxy Power:											TransferService
+			-	A BeanPostProcessor wrap your beans in a dynamic "proxy"					^
+				-	Adds behavior to your bean												|
+																							|			
+											   |------------------ Spring Proxy --------------------|	
+				transfer("50.00","1","2") ---> Spring TransactionInterceptor ---> TransferServiceImpl (target)
+													|				|
+													V				V
+												  begin			  commit		(Transactional behavior is added around the target)
+												
+													TransactionManager
+													
+		
+		 		- As you can see above, you requested for just TransferServiceImpl bean but Spring Proxy wrapped around 
+		 		bean with Transactional behavior and returns you wrapped bean.
+		 		
+		How many way Spring creates these Proxies? 
+		-	Types of Proxies:
+			-	Spring will create either JDK or CGLib proxies
+			-	JDK Proxy:
+				-	based upon Interfaces
+				-	Also called dynamic proxies
+				-	API is built into the JDK
+				-	Requirements: Java interfaces
+				-	All interfaces proxied
+			-	CGLib Proxy:
+				-	based upon subclasses
+				-	NOT build into JDK
+				-	included in Spring jars
+				-	Used when interface not available
+				-	Cannot be applied to final classes or methods 				
+		 		
+			Recommendation: Code to interface/Use JDK proxies (default)
+			
+		-	JDK Vs CGLib Proxies:														
+		
+			-	JDK Proxy			
+				-	Interface based	
+				
+				TransferServiceImpl implements TransferService
+			-	CGLib Proxy
+				-	subclass based
+				TransferServiceImpl extends TransferServiceImpl
+				
+-	The Destruction phase:
+		-	When you close a context the destruction phase completes
+			Example:
+				//Need a configurable ApplicationContext
+				ConfigurableApplicationContext context = SpringApplication.run(ApplicationConfig.class);
+				//Destroy the application
+				context.close();
+				
+		But exactly what happens in this phase?
+		-	Application Context Destruction Lifecycle:
+			-	Destroy bean instances call their destroy (clean-up) methods
+			-	Beans must have a destroy method defined
+				-	A no-argument method with void return
+			-	Context then destroys (cleans-up) itself
+				-	The context is not usable again
+										
+				@Bean (destroyMethod="clearCache")
+										^
+									A method on the AccountRepository		
+				public AccountRepository accountRepository() {
+					// ...
+				}
+			
+				Note - Destroy Method called only when ApplicationContext/JVM exit normally
+					 - Not called for prototype beans
+			-	Application Context Destruction can be done using XML or Annotations:
+				-	Annotations require annotation-config or component scanner to be activated
+				XML:
+					<bean id="accountRepository" class="app.impl.AccountRepository" destroy-method="clearCache">
+						...
+					</bean>
+				Annotation:
+					public class AccountRepository {
+						@PreDestroy
+						void clearCache() {
+							// close files, connections ...
+							// remove external resources ...
+						}	
+					}	
+
+-	Spring Lifecycle Summary:
+		-	The initialization phase:
+			-	Bean Post Processors for initialization and proxies
+		-	The use phase:
+			-	Proxies at work - most of Spring's "magic" uses a proxy
+		-	The destruction phase
+			-	Allow application to terminate cleanly
+										 		
+							 		
