@@ -1,0 +1,335 @@
+Topic in this file:
+	-	Role of Spring in Enterprise Data Access
+	-	Spring's DataAccessExceptionHierarchy
+	-	Configure Test Database
+	-	Implement Caching
+	-	Discuss NoSQL databases
+	
+-	The Role of Spring in Enterprise Data Access:
+	-	Spring Resource Management works consistently with all leading data access technologies
+	Jdbc Repository		 	-->	JDBC
+	Hibernate Repository	-->	Hibernate		==> 	Relational Database
+	Mybatis Repository 		-->	MyBatis
+	JPA Repository			-->	JPA
+								-	OpenJPA
+								-	DataNucleus
+								-	Hibernate
+								-	EclipseLink
+								-	other
+
+-	The Resource Management Problems:
+	-	Steps Required:
+		-	Access a data source and establish connection
+		-	Begin a transaction
+		-	Do the work - execute the business logic
+		-	Commit or rollback the transaction
+		-	Close the connection
+		
+	-	Spring Advantages:
+		-	No code to implement (classic cross-cutting concern)
+		-	No connection or session leakage
+		-	Throws own exceptions, independent of underlying API
+		
+		- High Level Example:
+		public class TransferServiceImpl implements TransferService	{
+			@Transactional	<-- marks method as needing a transaction
+			public void transfer(..) {
+				// Your business logic 				 |	Transaction management behavior added around your code
+			}										 |
+		}								|<-----------V------- Spring Proxy -------------------> |
+		transfer("50.00","1","2")	-->	Spring TransactionInterceptor	---> TransferServiceImpl (Target)
+											|	begin	| commit
+											V			V
+											Transaction Manager
+											
+-	Template Design Pattern:
+	-	Widely used and useful pattern
+	-	Define the outline or skeleton of an algorithms
+		-	Leaves the details to specific implementation later
+		-	Hides large amounts of boilerplate code
+	-	Spring provides many template classes like:
+		-	JdbcTemplate, JmsTemplate, RestTemplate, WebServiceTemplate...
+		-	Most of them hide low-level resource management
+		
+-	Where are my Transactions:
+	-	Every thread needs its own transaction
+		-	Typically: web-driven request
+	-	Spring transaction management:
+		-	Transaction manager handles transaction
+			-	Puts its into thread-local-storage
+		-	Data-access code like JdbcTemplate, finds it automatically
+			-	Or you can get it yourself:	DataSourceUtils.getConnection(dataSource)
+		-	Hibernate sessions, JTA(Java EE) works similarly
+		
+-	Data Access in a Layered Architecture:
+	-	Many enterprise applications consists of three logical layers
+		-	Service Layer (or application layer):
+			-	Exposes high-level application functions
+			-	Use-cases, business logic defined here
+		-	Data access Layer:
+			-	Defines interface to the applications's data repository (such as Relational or NoSQL database)
+		-	Infrastructure Layer:
+			-	Exposes low-level services to the other layers
+			
+		Service Layer	-->		Data Access Layer	-->		Infrastructure		
+						<--							<--		Layer
+		<-- 	A classic Separation of Concerns 	-->
+
+-	Exception Handling:
+	-	Checked Exceptions:
+		-	Force Developers to handle errors
+			-	If you can't handle it, must declare it
+		-	BAD: intermediate methods must declare exception(s) from all methods below
+			-	A form of tight-coupling
+	-	Unchecked Exceptions:
+		-	Can be thrown up the call hierarchy to the best place to handle it
+		-	Good: methods in between don't know about it
+			-	Better in an Enterprise Application
+		-	Springs throws Runtime(unchecked) Exceptions
+		
+-	Data Access Exception:													
+	-	SQL Exception:
+		-	SQLException:
+			-	Too general - one exception for every database error
+			-	Calling class 'knows' you are using JDBC
+			-	Tight coupling
+	-	Spring provides DataAccessException hierarchy
+		-	Hides whether you are using JPA, Hibernate, JDBC ...
+		-	Hierarchy of sub-exceptions
+			-	Not just one exception for everything
+		-	Consistent across all supported Data Access Technologies 
+		-	Unchecked Exception
+	
+	-	Example:	BadSqlGrammarException
+		Plain JDBC:
+			java.sql.SQLException
+			Message: Column not found: IDDD in statement 
+			errorCode: -28
+		Spring:
+			java.sql.SQLException
+			Message: Column not found: IDDD in statement
+			errorCode: -28
+				|
+				|	Error Code mapping
+				V			
+		BadSqlGrammarException
+		Message: PreparedStatementCallback;	bad SQL grammar ... Could not found: IDDD in statement
+		
+-	Spring Data Access Exceptions:
+
+		RuntimeException:
+			DataAccessException:
+				DataAccessResource FailureException
+				CleanupFailuer DataAccessException
+				OptimisticLocking FailureException
+				...
+				BadSqlGrammar Exception
+				DataIntegrity ViolationException				
+							
+-	Embedded Database Builder:
+	-	Conveniently define a new (empty) in-memory database 
+		-	And run script(s) to initialize it
+		-	HSQL, H2 and Derby are supported
+		Java:
+			@Bean		
+			public DataSource dataSource() {
+				EmbeddedDatabaseBuilder builder = new EmbeddedDatabaseBuilder(); 
+				return builder.setName("testdb")
+					.setType(EmbeddedDatabaseType.HSQL) 
+					.addScript("classpath:/testdb/schema.db") 
+					.addScript("classpath:/testdb/test-data.db").build();
+			}
+		-	JDBC Namespace Equivalent:		
+			-	Supports H2, HSQL, and Derby
+		XML:	
+			<bean class="example.order.OrderRepository" >
+				<property name="dataSource" ref="dataSource" />
+			</bean>
+			<!-- In-Memory Database Create at Startup -->
+			<jdbc:embedded-database id="dataSource" type="H2" >
+				<jdbc:script location="classpath:schema.sql"/>		
+				<jdbc:script location="classpath:test-data.sql" />
+			<jdbc:embedded-database>	
+			
+		
+	-	Initializing an Existing Test Database:		
+		-	JDBC Namespace supports populating other DataSource, too
+		XML:
+			<bean id="dataSource" class="org.apache.commons.dbcp.BasicDataSource">
+				<property name="url" value="${dataSource.url}"	/>
+				<property name="username" value="${dataSource.username}" />
+				<property name="password" value="${dataSource.password}" />
+			</bean>
+			<!-- Initialize an External database -->
+			<jdbc:initialize-database data-source="dataSource">
+				<jdbc:script location="classpath:schema.sql">
+				<jdbc:script location="classpath:test-data.sql" >
+			</jdbc:initialize-database>		  
+		Java:
+			@Configuration
+			public class DatabaseInitializer {
+				@Value("classpath:schema.sql") private Resource schemaScript;
+				@Value("classpath:test-data.sql") private Resource dataScript;
+				
+				// Explicitly define a database Populator to run the init scripts
+				private DatabasePopulator databasePopulator()	{
+					final ResourceDatabasePopulator populator = new ResourceDatabasePopulator();
+					populator.addScript(schemaScript);
+					populator.addScript(dataScript);
+					return populator;
+				}
+				// Bean can have any name, we don't use it (but Spring will)
+				@Bean 
+				public DataSourceInitializer anyName(final DataSource dataSource) {
+					final DataSourceInitializer initializer = new DataSourceInitializer();
+					initializer.setDataSource(dataSource);
+					initializer.setDatabasePopulator(databasePopulator());
+									^ Explicitly create a database initializer which will do the work in its post-construct method
+					return initializer;
+				} 
+			}
+			
+-	Implementing Caching:
+	-	About Caching:
+		-	What is a cache?
+			-	In this context: a key-value store = Map
+		-	Where do we use this caching?
+			-	Any method that always returns the same result for the same argument(s)
+				-	This method could do anything:
+					-	Calculate data on the fly
+					-	Execute a database query
+					-	Request data via RMI, JMS, a web-service
+			-	A unique key must be generated from the arguments
+				-	That's the cache key
+					
+	-	Caching Support:
+		-	Mark Method cacheable:
+			-	Indicate Caching key(s)
+			-	Number of cache to use (multiple caches supported)	
+		-	Define one or more caches in Spring configuration
+		
+		@Cacheable("countries")
+		public Country[] loadAllCountries()	{	...	}	<--- In-memory cache
+	
+	-	Caching with @Cacheable:
+		-	@Cacheable marks a method for caching
+			-	Its result is stored in a cache
+			-	Subsequent invocations (with the same arguments)
+				-	fetch data from cache using key, method not executed
+		-	@Cacheable attributes
+			- value: name of cache to use
+			- key: the key for each cached data-item
+				-	Uses SpeL and argument(s) of method
+			Example:
+				@Cacheable(value="topBooks", key='#refId.toUpperCase()')
+				public Book findBook(String refId)	{	...	}
+				
+	-	Caching via Annotations:
+			More examples:
+			public class BookService	{
+				@Cacheable(value="topBooks", key="#title", condition="#title.length < 32")
+									^ Use 'topBooks' cache			^ Only cache if condition true	
+				public Book findBook(String title, boolean checkWarehouse)	{	...	}
+				
+				@Cacheable(value="topBooks", key="#author.name")
+													^ Use object property
+				public Book findBook2(Author author, boolean checkWarehouse)	{	...	}
+				
+				@Cacheable(value="topBooks", key="T(example.KeyGen).hash(#author)")
+													^ Custom Key Generator
+				public Book findBook3(Author author, boolean checkWarehouse)	{	...	}
+				
+				@CacheEvict(value="topBooks" beforeInvocation=true)
+												^ clear cache before method invoked
+				public void loadBooks()	{	...	}
+				....
+			}
+	-	Enabling Caching Proxy:
+		-	Caching must be enabled:
+			@Configuration
+			@EnableCaching
+			public class MyConfig	{
+				@Bean
+				public BookService bookService() {	...	}
+			}
+					OR
+			<cache:annotation-driven>
+			<bean id="bookService" class="example.BookService" />		
+			
+	-	Pure XML Cache Setup:
+		-	For example with third-party class
+			<bean id="bookService" class="example.BookService">
+			<aop:config>
+				<aop:advisor advice-ref="bookCache"	pointcut="execution(* *..BookService.*(..))" />
+			</aop:config>
+			<cache:advice id="bookCache" cache-manager="cacheManager">
+				<cache:caching cache="topBooks">
+					<cache:cacheable method="findBook" key="#refId" />
+					<cache:cache-evict method="loadBooks" all-entries="true" />
+				</cache:caching>
+			</cache:advice>
+	
+		-	Setup Cache Manager:	
+			Using XML you need to setup cacheManager bean. 
+			Some cacheManager provided by org.springframework.cache package, other write your own.
+			-	SimpleCacheManager	
+				-	For each cache name, it creates ConcurrentHashMap						
+			@Bean
+			public CacheManager cacheManager()	{
+									^ Keep cacheManager bean name
+				SimpleCacheManager cacheManager = new SimpleCacheManager("topAuthors","topBooks");
+				return cacheManager;
+			}
+-	Third-Party Cache Implementations:
+	-	Simple Cache is OK for testing
+		-	But has no cache control options (overflow, eviction)
+	-	Third-party alternatives
+		-	Terracotta's EhCache
+		-	Pivotal's Gemfire
+		-	Google's Caffeine
+		-	Infinispan
+		-	Hazelcast
+		-	Redis
+		-	Couchbase
+			
+-	NoSQL Database:
+	-	Not Only Relational:
+		-	NoSQL
+			-	Relational databases only store some data
+				-	LDAP, data-warehouses, files
+				-	Most documents and spreadsheets aren't in any database
+		-	Other database product exits
+			-	Have strengths where RDB weak
+				-	Non-Tabular data
+					-	Hierarchical data: parts inventory, org. chart
+					-	Network structures: telephone cables, roads, molecules
+					-	Document: XML, spreadsheets, contracts
+					-	Geographical data: maps, GPS navigation
+					-	Many more...
+					
+	-	So many choices of Database:
+		-	Many options - each has a particular strength
+			-	Document databases
+				-	MongoDB, CouchDB coming
+			-	Distributed key-value stores (smart caches)
+				-	Redis, Riak
+			-	Network (graph) database
+				-	Neo4j
+			-	Big Data
+				-	Apache Hadoop (VMWare Serengeti)
+			-	Data Grid
+				-	Gemfire
+			-	Column Stores coming: HBase, Cassandra
+
+-	Data Management Summary:
+	-	Data Access with Spring
+		-	Enables layered architecture
+			-	Higher layer should not know about data management below
+		-	Isolate via Data Access Exceptions
+			-	Hierarchy makes them easier to handle
+		-	Provides consistent transaction management
+		-	Supports most leading data-access technologies
+			-	Relational and non-relational (NoSQL)
+		-	A key component of the core spring libraries
+		-	Automatic Caching facility			
+
