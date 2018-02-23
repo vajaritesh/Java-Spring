@@ -1,0 +1,295 @@
+Topic in this file:
+	-	Concept of Test Driven Development (TDD)
+	-	Integration test using Spring
+	-	Configure Tests using Spring Profiles
+	-	Spring Tests to work with Databases	
+	
+-	Testing Spring Applications:
+	-	Unit Testing without Spring
+	-	Integration Testing with Spring
+
+-	What is TDD?
+	TDD = Test Driven Development
+		-	Is it writing tests before the code?
+		-	Is it writing tests at the same time as the code?
+		-	Ultimately that is not what is most important
+	TDD is About:
+		-	Writing automated tests that verify code actually works
+		-	Driving development with well defined requirements in the form of tests
+	
+	-	Every development process includes testing
+		-	Either automated or manual
+	-	Automated tests result in a faster development cycle
+		-	Your IDE is better at this than you are
+	-	Properly done TDD is faster than development without tests
+	
+	TDD and Agility:
+		-	Comprehensive test coverage provides confidence
+		-	Confidence enables re-factoring
+		-	Re-factoring is essential to agile development
+		
+	TDD and Design:
+		-	Testing makes you think about your design
+		-	If your code is hard to test then the design should be reconsidered
+		
+	TDD and Focus:
+		-	A test cases helps you focus on what matters
+		-	It helps you not to write code that you don't need
+		-	Find problems early
+	
+	Benefits of Continuous Integration:
+		-	The cost to fix a bug grows exponentially with time if its not discovered.
+		-	Continuous Integration (CI) focuses on reducing the time before the bug is discovered
+			-	Effective CI requires automated tests
+
+-	Unit Testing:
+	-	Tests one unit of functionality
+	-	Keeps dependencies minimal
+	-	Isolated from the environment (including spring)
+	-	Uses simplified alternatives for dependencies like:
+		-	Stubs and/or Mocks
+								
+-	Integration Testing:
+	-	Tests the interaction of multiple units working together
+		-	All should work individually (unit tests confirmed this)
+	-	Tests application classes in context of their surrounding infrastructure
+		-	Out-of-container testing (container less), no need to run up full JEE system
+		-	Infrastructure may be "scaled down":
+			-	Use Apache DBCP (Database Connection Pool) connection pool instead of container provider pool obtained through JNDI
+			-	Use ActiveMQ to save expensive commercial JMS licenses
+			
+	- Example:
+		Production Mode:
+		Caller 	    -----------------------------> TransferServiceImpl  --------------------> JpaAccountRepo	------> Production DB 			
+						Injected by Spring								Injected by Spring
+							
+		Integration Test:
+		TransferServiceTests --------------------> TransferServiceImpl  --------------------> JpaAccountRepo	------> Test DB 			
+						Injected by Spring								Injected by Spring		
+
+-	Spring Integration Test Support:
+	-	Packaged as a separate module
+		-	spring-test.jar
+	-	Consists of several JUnit test support classes
+	-	Central support class is SpringJUnit4ClassRunner
+		-	Caches a shared ApplicationContext across test methods
+		
+	Example:
+		@RunWith(SpringJUnit4ClassRunner.class)
+						^ Run with Spring Support						
+		@ContextConfiguration(classes=SystemTestConfig.class)
+										^ Point to system test configuration test
+		public final class TransferServiceTests {
+			@Autowired
+				^ Inject bean to test
+			private TransferService transferService;
+			@Test
+			public void shouldTransferMoneySuccessfully()	{
+				TransferConfirmation conf = transferService.transfer(...);
+						^ Test the system as normal	
+				...
+			}
+		}
+		
+		Here, 	-	SpringJUnit4ClassRunner indicates its Spring test
+				-	Class level Configuration SystemTestConfig.class in ContextConfiguration
+				
+		Including Configuration as an inner class:
+		@RunWith(SpringJUnit4ClassRunner.class)							
+		@ContextConfiguration
+								^ Don't specify configuration classes
+		public final class JdbcAccountRepoTest {
+			
+			private JdbcAccountRepot repo - ... ;
+			@Test
+			public void shouldUpdateDatabasesSucessfully()	{ ... }
+			
+			@Configuration	<---- Configuration embedded in the class
+			@Import(SystemTestConfig.class)
+			static class TestConfiguration {
+				@Bean public DataSource dataSource() {...}
+											^	Override a bean with a test alternative
+			}	
+		}
+		
+	-	@ContextConfiguration using XML:
+		@RunWith(SpringJUnit4ClassRunner.class)
+		@ContextConfiguration("classpath:com/acme/system-test-config.xml")
+		public class TransferServiceTests { ... }
+		
+		@RunWith(SpringJUnit4ClassRunner.class)
+		@ContextConfiguration("classpath:com/acme/config-1.xml","file:db-config.xml")
+		public class TransferServiceTests { ... }
+		
+		@RunWith(SpringJUnit4ClassRunner.class)
+		@ContextConfiguration	<-- Default to ${classname}-context.xml in same package
+						^ Loads TransferServiceTests-context.xml
+		public class TransferServiceTests { ... }									
+			
+	-	Multiple test methods
+		@RunWith(SpringJUnit4ClassRunner.class)
+		@ContextConfiguration(classes=SystemTestConfig.class)
+										^ ApplicationContext is instantiated only once for all tests that use the same set of config files										
+		public final class TransferServiceTests {
+			@Autowired
+			private TransferService transferService;
+			@Test
+			public void successfulTransfer() {	...	}
+			
+			@Test
+			public void failedTransfer()	{ ... }
+		}
+		Note - Annotate test method with @DirtiesContext to force recreation of the cached ApplicationContext if method changes the contained beans
+
+	-	Test Property Sources:
+		-	Use @TestPropertySource annotation to specify properties or properties file
+		-	Custom properties just for testing
+			- you can specify one or more properties
+				-	override any existing properties of same name
+			- you can specify location of one or more properties files to load
+				-	default to looking for [classname] .properties
+		
+		Example:
+			@RunWith(SpringJUnit4ClassRunner.class)
+			@ContextConfiguration(classes=SystemTestConfig.class)
+			@TestPropertySource(properties={"username=foo","password=bar"}
+								location = "classpath:/transfer-test.properties")
+			public class TransferServiceTests {
+				...
+			}
+			
+-	Spring 4.3 Simplification:
+	-	Spring 4.3 use SpringRunner as an alternative to the SpringJUnit4ClassRunner
+		-	Simply a sub-class with nicer name
+		
+		@RunWith(SpringRunner.class)
+		@ContextConfiguration(classes=SystemTestConfig.class)
+		public class TransferServiceTests {
+			...
+		}
+		
+-	Benefits of Testing with Spring:
+	-	No need to deploy to an external container to test the application functionality
+		-	Run everything quickly inside your IDE
+		-	Supports Continous Integration testing
+	-	Spring allows reuse of configuration settings between test and production environments
+		-	Application Configuration logic is typically reuse
+		-	Infrastructure configuration is environment-specific
+			-	DataSources
+			-	JMS Queues
+			
+			
+-	Testing with Profiles:
+		-	Activating Profiles for a Test:
+			-	@ActiveProfiles inside the test class
+			-	You can define one or more profiles
+			-	With Profiles, Only Beans associated with that profiles are instantiated
+			-	You can also have Beans that are not associated with any profile
+			Example:
+				-	Two profiles activated - jdbc and dev
+				@RunWith(SpringJUnit4ClassRunner.class)
+				@ContextConfiguration(classes=DevConfig.class)
+				@ActiveProfile({"jdbc","dev"})
+				public class TransferServiceTests {	...	}
+			
+		-	Profile Activation with Java Configuration:
+			-	@ActiveProfiles inside the test class
+			-	@Profile inside the @Configuration class
+			Example:
+				@RunWith(SpringJUnit4ClassRunner.class)
+				@ContextConfiguration(classes=DevConfig.class)
+				@ActiveProfile("jdbc")
+				public class TransferServiceTests {	...	}
+				
+				@Configuration
+				@Profile("jdbc")
+				public class DevConfig {
+					@Bean
+					{	... }
+				}			
+			Remember: only @Configurations matching an active profile or with no profile beans are loaded
+			
+		-	Profile Activation with Annotations:	
+			-	@ActiveProfiles inside the test class
+			-	@Profile inside the Component class
+			Example:
+				@RunWith(SpringJUnit4ClassRunner.class)
+				@ContextConfiguration(classes=DevConfig.class)
+				@ActiveProfile("jdbc")
+				public class TransferServiceTests {	...	}
+				
+				@Repository
+				@Profile("jdbc")
+				public class JdbcAccountRepository {
+					...
+				}
+			Remember: only beans with current profile or no profile are component-scanned
+			
+		-	Profile Activation with XML:
+			-	@ActiveProfiles inside the test class
+			-	profile attribute inside <bean> tag
+			Example:
+				@RunWith(SpringJUnit4ClassRunner.class)
+				@ContextConfiguration("infra-test-conf.xml")
+				@ActiveProfile("jdbc")
+				public class TransferServiceTests {	...	}
+				
+				<beans xmlns=...>
+					<!-- Available to all profiles -->
+					<bean id="rewardNetwork" ... />
+					<beans profile="jdbc"> ... </beans>
+					<beans profile="jpa"> ... </beans>
+			Remember: only beans with current profile or no profile are loaded
+
+-	Testing with Databases:
+		-	Integration testing against SQL database is common.
+		-	In-memory databases useful for this kind of testing
+			-	No prior install needed
+		-	Common requirement: populate DB before test runs
+			-	Use the @Sql annotation:
+				@Test
+				@Sql("/testfiles/test-data.sql")	<-- Run this SQL command, Before this test method executes
+				public void successfulTransfer() {
+					...
+				}
+		-	@Sql Examples:
+		
+			@RunWith(SpringJUnit4ClassRunner.class)
+			@ContextConfiguraiton(...)
+			@Sql({"/testfiles/schema.sql","/testfiles/general-data.sql"})
+										^ Run these scripts before each @Test method
+			public class MainTests {
+				@Test
+				@Sql	<-- Run script named (by default) MainTests.success.sql in same package
+				public void success()	{	...	}
+				
+				@Test
+				@Sql("/testfiles/error.sql")	<-- Run before (default) @Test method
+				@Sql(scripts="/testfiles/cleanup.sql",	<--- Run after @Test method 
+					 executionPhase=Sql.ExecutionPhase.AFTER_TEST_METHOD )
+				public void transferError()	{	...	}
+			}
+			
+		-	@Sql Options:
+			-	When does the SQL run?
+				-	executionPhase: before (default) or after the test method
+				-	config: @SqlConfig has many options to control SQL scripts like:
+					-	What to do if script fails? FAIL_ON_ERROR, CONTINUE_ON_ERROR, IGNORE_FAILED_DROPS, DEFAULTS*
+					-	SQL syntax control: comments, statement separation
+					DEFAULTS* = is FAIL_ON_ERROR if nothing is specify at @Sql class level	
+			@Sql( scripts = "/test-user-data.sql",
+				  executionPhase = ExecutionPhase.AFTER_TEST_METHOD,
+				  config = @SqlConfig(errorMode=ErrorMode.FAIL_ON_ERROR, commentPrefix = "//", separator = "@@")
+			)
+
+-	Testing Summary:
+	-	Testing is essential part of any development
+	-	Unit testing tests a class in isolation
+		-	External dependencies should be minimized
+		-	Consider creating stubs or mocks to unit test
+		-	You don't need Spring to unit test
+	-	Integration testing tests the interaction of multiple units working together
+		-	Spring provides good integration testing support
+		-	Profiles for different test & deployment configurations
+		-	Built-in support for testing with Databases		
+						
