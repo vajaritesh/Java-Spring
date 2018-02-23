@@ -1,0 +1,454 @@
+Topic in this file:
+	-	Explain why Transactions are used
+		-	And how Java support them different ways
+	-	Describe and use Spring Transaction Management
+	-	Configure Isolation Levels and Transaction Propagation
+	-	Setup Rollback rules
+	-	Use Transactions in Tests
+		
+-	What is a Transaction?
+	-	A set of tasks which will happen as single, invisible action
+	-	ACID
+-	Why use Transaction?
+	-	Atomic:
+		-	Each set of work, either all happen or non happen
+	-	Consistent:
+		-	Database integrity constraints are never violated
+	-	Isolated:
+		-	each transaction happen independently in isolated 
+	-	Durable:
+		-	Committed changes are permanent
+		
+-	The rewardAccountFor(Dining) method represents a unit-of-work that should be atomic:
+	Reward Network -> AccountRepostiory -> Restaurant Repository -> Reward Repository -> Account -> Restaurant
+	-	unit-of-work:
+		SELECT:
+			-	findByCreditCard(String)						
+			-	findByMerchantNumber(String)			
+		SELECT:
+			-	calculateBenefitFor(Account, Dining)
+		UPDATE:
+			-	makeContribution(MonetaryAmount)
+			-	updateBeneficiaries(Account)
+		INSERT:
+			-	confirmReward(AccountContribution Dining)	
+		
+			
+	-	Naive Approach to perform rewardAccountFor(Dining):
+		-	Connection per Data Access Operation:
+			-	This unit-of-work contains 4 data access operations
+				-	Each operation acquires, uses, and releases a distinct Connection
+			-	The unit-of-work is non-transactional
+			
+		-	Running non-Transactionally:
+		-	unit-of-work:
+		SELECT:
+			-	getConnection()		// Connection - 1
+				-	findByCreditCard(String)						
+				-	findByMerchantNumber(String)
+			-	close()				
+		SELECT:
+			-	getConnection()		// Connection - 2
+				-	calculateBenefitFor(Account, Dining)
+			-	close()
+		UPDATE:
+			-	getConnection()		// Connection - 3
+				-	makeContribution(MonetaryAmount)
+				-	updateBeneficiaries(Account)
+			-	close()	
+		INSERT:
+			-	getConnection()		// Connection - 4
+				-	confirmReward(AccountContribution Dining)
+			-	close()
+			
+		-	Partial Failures could happen:	This unit-of-work is NOT atomic
+			-	Suppose an Account is being rewarded
+				
+			rewardAccountFor(Dining) 	----->	 updateBeneficiaries(..)	----->	confirmReward(..)
+										success								fail
+										
+			-	If the beneficiaries are updated...
+			-	But the reward confirmation fails..
+			-	There will be no record of the reward!
+			 
+	-	Correct Approach
+		-	Connection per Unit-Of-Work		
+		-	More efficient
+			-	Same Connection reused for each operation
+		-	Operations complete as an atomic unit
+			-	Either all succeed or all fail
+		-	The unit-of-work can run in a transaction	 		
+							
+		-	Running Transactionally:							
+			SELECT:
+				-	getConnection()		// Connection - 1
+					-	findByCreditCard(String)						
+					-	findByMerchantNumber(String)
+			SELECT:				
+					-	calculateBenefitFor(Account, Dining)
+			UPDATE:
+					-	makeContribution(MonetaryAmount)
+					-	updateBeneficiaries(Account)
+			INSERT:
+					-	confirmReward(AccountContribution Dining)
+				-	close()
+
+-	Java Transaction Management:
+		-	Java has several APIs which handle transactions differently
+			-	JDBC, JMS, JTA, Hibernate, JPA, etc..
+		-	Each uses program code to mark the start and end of the transaction
+			-	Transaction Demarcation
+		-	Different APIs for Global and Local transactions
+		
+		-	Global and Local Transaction Management
+		
+			-	Local Transactions:	Single Resource
+				-	Transactions managed by underlying resource
+					Your Application	---->	Database
+			-	Global (distributed) Transactions: Multiple Resource
+				-	Transactions managed by separate, dedicated transaction manager
+														------------------->	Oracle DB
+														|	
+					Your Application	---->	Transaction Manager		---->	SQL Server
+														|
+														-------> Message Queue
+		-	JDBC Transaction Management Example:
+			try	{											|	
+				conn = dataSource.getConnection();			|
+				conn.setAutoCommit(false);					|	
+				...											|
+				conn.commit();								|	[Programatic Transaction Demarcation]	
+			} catch (Exception e) {							|	
+						^ Checked Exceptions				|
+				conn.rollback()								|
+				...											|
+			}												|
+			[JDBC specific API ]
+			For Local Transaction only:
+				-	Code cannot 'join' a transaction already in progress
+				-	Code cannot be used with global transaction
+				
+		-	JMS Transaction Management Example:
+			try	{											|
+				session = connection.createSession(true,0);	|
+				...											|	
+				session.commit();							|	[Programatic Transaction Demarcation]
+			} catch(Exception e)	{						|
+						^ checked exception					|
+				session.rollback();							|	
+				...											|
+			}												|
+			[JMS specific API ]			
+			For Local Transaction only:
+				-	Code cannot 'join' a transaction already in progress
+				-	Code cannot be used with global transaction
+				
+		-	JPA/Hibernate Transaction Management Example:
+			Hibernate Specific API:
+			//Hibernate
+			Transaction tx = session.beginTransaction();	|
+			...												|	[Programatic Transaction Demarcation]
+			tx.commit();									|
+			
+			JPA Specific API:
+			//JPA
+			Transaction tx = entityManager.getTransaction();|	
+			... 											|	[Programatic Transaction Demarcation]	
+			tx.begin()										|
+			
+										[Local Transaction Only]
+										
+		-	Java Transaction API (JTA)
+			try	{
+				UserTransaction ut = (UserTransaction) new InitialContext()	|
+									.lookup("java.comp/UserTransaction");	|
+				ut.begin();													|
+				....														|	[Programatic Transaction Demarcation]
+				ut.commit();												|
+			} catch(Exception e) {											|
+				ut.rollback();												|
+				....														|
+			}
+			[ JTA Specific API]
+			
+			Requires a JTA implementation:
+				-	"Full" application server (WebSphere, WebLogic, JBoss, etc.)
+				-	Standalone implementation (Atomikos, JTOM, etc.)
+				
+-	Problem with Java Transaction Management:
+	-	Multiple APIs for different resources
+	-	Programatic transaction demarcation
+		-	Typical performed in repository layer (wrong place)
+		-	Usually repeated (cross-cutting concern)
+	-	Service layer more appropriate
+		-	Service layer more appropriate
+			-	Multiple data access methods often called within a single transaction
+			-	But: don't want data-access code in service-layer
+	-	Orthogonal concerns
+		-	Transaction demarcation should be independent of transaction implementation
+
+-	Spring Transaction Management -1:
+	-	Spring separates transaction demarcation from transaction implementation
+		-	Demarcation expressed declaratively via AOP
+			-	Programmatic approach also available
+		-	PlatformTransactionManager abstraction hides implementation details
+			-	Several implementations available
+		-	Spring uses the same API for global vs. local
+			-	changes from local to global is minor
+				-	just change the transaction manager
+								
+-	Spring Transaction Management -2:
+	-	There are only 2 steps
+		-	Declare a PlatformTransactionManager bean
+		-	Declare the transactional methods
+			-	Using Annotations, XML, Programmatic
+			-	Can mix and match
+			
+	-	PlatformTransactionManager
+		-	Spring's PlatformTransactionManager is the base interface for the abstraction
+		-	Several Implementations are available
+			-	DataSourceTransactionManager
+			-	HibernateTransactionManager
+			-	JpaTransactionManager
+			-	JtaTransactionManger
+			-	WebLogicJtaTransactionManger
+			-	WebSphereUowTransactionManger
+			-	and more
+		Note - Spring allows you to configure whether you use JTA or not. It does not have any impact on your Java classes
+		
+		-	Deploying the Transaction Manager
+			-	Create the required implementation
+				-	just like any other Spring bean
+					-	Configure as appropriate
+				-	Here is the manager for a DataSource
+			@Bean
+			public PlatformTransactionManager transactionManager(DataSource dataSource)	{
+				return new DataSourceTransactionManager(dataSource);
+			}
+			-	A DataSource bean must define elsewhere
+			
+		-	Accessing a JTA Transaction Manager:
+			-	Usa a JNDI lookup for container-managed DataSource
+				-	Or use container-specific subclasses
+					-	WebLogicJtaTransactionManager
+					-	WebSphereUowTransactionManager
+			@Bean
+			public PlatformTransactionManager transactionMnager {
+				return new JtaTransactionManager();
+			}
+			@Bean
+			public DataSource dataSource(@Value("${db.jndi}" String jndiName) {
+				JndiDataSourceLookup lookup = new JndiDataSourceLookup();
+				return lookup.getDataSource(jndiName);
+			}
+		
+		-	@Transactional Configuration:
+			-	In your code
+				public class RewardNetworkImpl implements RewardNetwork	{
+					@Transactional
+					public RewardConfirmation rewardAccountFor(Dining d)	{
+						// atomic unit-of-work
+					}
+				}
+			-	In your Spring configuration
+				@Configuration
+				@EnableTransactionManagement	<-- Defines a Bean Post-Processor - proxies @Transactional beans
+				public class TxnConfig	{
+					@Bean
+					public PlatformTransactionManager transactionManager(DataSource ds);
+				} Or use <tx:annotation-driven />
+				
+		-	@Transactional: What happens exactly?
+			-	Target object wrapped in a proxy				
+				-	Uses an Around advice
+			-	Proxy implements the following behavior
+				-	Transaction started before entering the method
+				-	Commit at the end of the method
+				-	Rollback if method throws a RuntimeException
+					-	Default behavior
+					-	Can be overriden
+			-	Transaction context bound to current thread
+			-	All controlled by configuration
+			
+	-	@Transactional - Class Level:
+		-	Applies to all methods declared by interfaces
+			@Transactional
+			public class RewardNetworkImpl implements RewardNetwork	{
+				public RewardConfirmation rewardAccountFr(Dining d) {
+					// atomic unit-of-work
+				}
+				public RewardConfirmation updateConfirmation(RewardConfirmation rc)	{
+					// atomic unit-of-work
+				}
+			}		
+			
+	-	@Transactional - Class and method levels
+		-	Combining class and method levels
+			@Transactional(timeout=60)	<-- default settings
+			public class RewardNetworkImpl implements RewardNetwork	{
+				public RewardConfirmation rewadAccountFor(Dining d)	{
+					// atomic unit-of-work
+				}
+				@Transactional(timeout=45)	<--- overrides attributes at method level
+				public RewardConfirmation updateConfirmation(RewardConfirmation rc)	{
+					// atomic unit-of-work
+				}
+			}
+			
+-	Isolation levels:
+	-	4 Isolation levels can be used:
+		-	READ_UNCOMMITTED
+		-	READ_COMMITTED
+		-	REPEATABLE_READ
+		-	SERIALIZABLE
+	-	Some DBMSs do not support all isolation levels
+	-	Isolation is complicated subject
+		-	DBMS all have differences in the way their isolation policies have been implemented
+		-	We just provide general guidelines
+	
+	-	Dirty Reads:
+	
+		Thread - 1	---------------> Update Beneficiaries ----------------> Confirm Reward	---------->
+					b1.savings = $700					b1.savings = $1200					failed: b1.savings = $700
+					
+		Thread - 2 	---------------> Read Beneficiary Savings ---------------->
+					b1.savings = $1200							b1.savings = $1200
+					
+		Transactions should be isolated - unable to see the results of another uncommitted unit-of-work
+	
+	-	READ_UNCOMMITTED:
+		-	Lowest Isolation level - allows dirty reads
+		-	Current transaction can see the results of another uncommitted unit-of-work
+		-	Typically used for large, intrusive read only transactions
+		-	And/or where the data is constantly changing
+		public class RewardNetworkImpl implements RewardNetwork	{
+			@Transactional(isolation=Isolation.READ_UNCOMMITTED)
+			public BigDecimal totalRewards(String merchantNumber, int year)	{
+				// Calculate total rewards for a restaurant for a whole year
+			}
+		}
+	-	READ_COMMITTED:	
+		-	Does not allow dirty reads
+			-	only committed information can be accessed
+		-	Default strategy for most databases
+		public class RewardNetworkImpl implements RewardNetwork	{
+			@Transactional(isolation=Isolation.READ_COMMITTED)
+			public RewardConfirmation rewardAccountFor(Dining dining)	{
+				// atomic unit-of-work
+			}
+		}
+	
+	-	Highest Isolation levels:
+		-	REPEATABLE_READ:
+			-	Does not allow dirty reads
+			-	Non-repeatable reads are prevented
+				-	If a row read twice in the same transaction, the result will always be the same
+					-	Might result in locking depending on the DBMS
+		-	SERIALIZABLE:
+			-	Prevents non-repeatable reads and dirty-reads
+			-	Also prevents phantom reads
+
+-	Transaction Propagation:
+	-	Understanding Transaction Propagation:
+		-	Consider the sample below. What should happen below if ClientServiceImpl calls AccountServiceImpl?
+			-	Should everything run into a single transaction?
+			-	Should each service have its own transaction?
+			
+		public class ClientServiceImpl implements ClientService	{
+			@Autowired
+			private AccountService accountService;
+			@Transactional
+			public void updateClient(Client c)	{
+				//..
+				this.accountService.update(c.getAccounts());
+			}
+		}
+		public class AccountServiceImpl implements AccountService	{
+			@Transactional
+			public void update(List <Account> l)	{ 
+				// ... 
+			} 
+		}
+		When transaction start, it should check if there is already existing transaction?
+			-	if so, should this transaction should merge with existing transaction?
+			-	should this transaction need to create new transaction?
+		A	------------------Single Transaction------------->
+		B	---Transaction 1---->-------Transaction 2 ------->
+		
+		Caller ---> Transactional Method 1 ----- Transactional Method 2
+	
+		Transaction created, committed or rolled back as needed
+		Behavior driven by metadata for the method
+											
+		
+	-	Transaction Propagation with Spring
+		-	7 levels of propagation
+		-	The following examples show just REQUIRED and REQUIRES_NEW
+			-	Check documentation for other levels
+		
+		-	REQUIRED:
+			-	Default value
+			-	Execute within a current transaction, create a new one if none exits
+				@Transactional(propagation=Propagation.REQUIRES)
+			
+				-----Transaction 1---->|-----Transaction 1---->
+				-----No Transaction -->|-----Transaction 1---->
+				
+		-	REQUIRES_NEW:
+			-	Create a new transaction, suspending the current transaction if exits				
+				@Transactional(propagation=Propagation.REQUIRES_NEW)
+				
+				-----No Transaction -->|-----Transaction 1---->
+				-----Transaction 1---->|-----Transaction 2---->
+				
+-	Rollback rules:
+	-	Default Behavior:
+		-	By default, a transaction is roll back if a RuntimeException has been thrown
+			-	Could be any kind of RuntimeException:
+				DataAccessException, HibernateException etc.
+				
+		public class RewardNetworkImpl implements RewardNetwork	{
+			@Transactional
+			public RewardConfirmation rewardAccountFor(Dining d)	{
+				//...
+				throw new RuntimeException();	<-- Triggers a rollback
+			}
+		}
+	
+	-	rollbackFor and noRollbackFor
+		-	Default settings can be overridden with rollbackFor and/or noRollbackFor attributes
+			Example:
+				public class RewardNetworkImpl implements RewardNetwork	{
+					@Transactional(rollbackFor=MyCheckedException.class, noRollbackFor={JmxException.class, MailException.class})
+					public RewardConfirmation rewardAccountFor(Dining d)	throws Exception {
+						// ...
+					}
+				}
+
+-	Testing:
+	-	@Transactional within Integration Test:
+		-	Annotate test method (or class) with @Transactional
+			-	Run test method in a transaction
+			-	Transaction will be rolled back afterwards
+				-	No need to clean up your database after testing
+		@ContextConfiguration(classes=RewardConfig.class)
+		@RunWith(SpringJUnit4ClassRunner.class)
+		public class RewardNetworkTest	{
+			@Test
+			@Transactional	<-- This test is now Transactional
+			public void testRewardAccountFor()	{
+				...
+			}
+		}
+		
+	-	Controlling Transactional Tests
+		@ContextConfigurtion(classes=RewardsConfig.class)
+		@RunWith(SpringJUnit4ClassRunner.class)
+		@Transactional	<-- Make all tests transactional
+		public class RewardNetworkTest	{
+			@Test
+			@Commit	<-- Commit transaction at end of test
+			public void testRewardAccountFor()	{
+				...	// Whatever happens here will be committed
+			}
+		}
