@@ -1,0 +1,434 @@
+Topic in this file:
+	-	Describe the principles of HTTP REST
+	-	Use Spring MVC to build RESTful servers
+	-	Develop RESTful Clients using RestTemplate
+	
+-	REST Introduction:
+	-	Open up access to your web-server's functionality
+		-	Programmatic clients can also connect via HTTP
+			-	Such as: mobile applications, microservices
+		-	Browsers: SPA, AJAX
+	-	REST is an architectural style that describes best practices to expose web services over HTTP
+		-	REpresentational State Transfer term by Roy Fielding
+		-	HTTP as application protocol, not just transport
+		-	Emphasizes scalability
+		-	Not a framework or specification
+		
+-	REST Principles - 1:
+	-	Expose resource through URIs
+		-	Model nouns, not verbs
+		-	http://springbank.io/banking/accounts/123456789
+	-	Resources support limited set of operations
+		-	GET, PUT, POST, DELETE in case of HTTP
+		-	All have well-defined semantics
+	-	Example: update an order
+		-	PUT to orders/123
+		-	don't POST to /order/edit?id=123
+		HTTP Methods + Resources = Uniform interfaces			 		
+	
+-	REST Principles - 2:
+	-	Client can request particular representation
+		-	Resources can support multiple representations
+		-	HTML, XML, JSON ...
+	-	Representations can link to other resources
+		-	Allows for extensions and discovery like with web sites
+	-	Hypermedia As The Engine of Application State
+		-	HATEOAS: Probably world's worst acronym
+		-	RESTful responses contains the links you need - just like HTML pages do
+		
+-	REST Principles - 3:
+	-	Stateless architecture
+		-	No HttpSession usage
+		-	GETs can be cached on URL
+		-	Required client to keep track of staete
+		-	Part of what it makes scalable
+		-	Looser coupling between client and server
+	-	HTTP headers and status codes communicate result to clients
+		-	All well-defined in HTTP specification 			 				
+	
+-	Why REST?
+	-	Benefit of REST:
+		-	Every Platform/Languages supports HTTP
+			-	Unlike SOAP + WS specification
+		-	Easy to support many different clients
+			-	Scripts, Browsers, Applications
+		-	Scalability
+		-	Support for redirect, caching, different representations, resource identification
+		-	Support for multiple format:
+			-	JSON and Atom are popular choices 				
+			
+-	REST and Java: JAX-RS:
+	-	JAX-RS is a Java EE 6 standard for building RESTful applications
+		-	Focuses on programmatic clients, not browsers
+	-	Various implementations:
+		-	Jersey (RI), RESTEasy, Restlet, CXF
+		-	All implementation provides spring support
+	-	Good option for full REST support using standard
+	-	No support for building client in standard
+		-	Although some implementation do offer it
+		
+-	REST and Java: Spring MVC:
+	-	Spring-MVC provides REST support as well
+		-	Using familiar and consistent programming model
+		-	Spring MVC does not implement JAX-RS
+	-	Single web-application for everything
+		-	Traditional web-site: HTML, browsers
+		-	Programmatic client support (RESTful web applications, HTTP-base web services)
+	-	RestTemplate: for building programmatic clients in java									
+
+-	Spring MVC supports for RESTfull applications:
+	-	Spring-MVC and REST:
+		-	Will now extends Spring MVC to support REST
+			-	Map requests based on HTTP method
+			-	Define response status
+			-	Message Converters
+			-	Access request and response body data
+			-	Build valid Location URIs	
+
+	-	Request/Response Processing:
+		-	Request Mapping Based on HTTP Method:
+			-	Can map HTTP requests based on method
+				-	Allow same URL to mapped to multiple Java methods
+			-	RequestMethod enumerators are
+				-	GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS, TRACE
+				
+			@RequestMapping(path="/orders", method=RequestMethod.DELETE) 
+			public void updateOrders( ... ) {
+	 	  		// delete all Orders
+			}
+			@RequestMapping(path="/orders/{id}", method=RequestMethod.PUT) 
+			public void updateOrder( ... ) {
+	   			// update order using data from the request
+			}
+		
+		-	Simple MApping Annotations:
+			-	Alternative handler mapping shortcuts
+				-	@RequestMapping(path="/accounts", method=RequestMethod.GET);
+				-	Or @GetMapping("/accounts");
+			-	Exits for these HTTP methods
+				-	@GetMapping
+				-	@PostMapping
+				-	@PutMapping
+				-	@DeleteMapping
+				-	@PatchMapping
+			-	For HEAD, OPTIONS, TRACE use RequestMethod enumerators
+			
+		-	HTTP Status Code Support:
+			-	Web apps just use handful of status codes
+				-	Success: 200 OK
+				-	Redirect: 30x for Redirects
+				-	Client Error: 404 Not Found
+				-	Server Error: 500 (such as unhandled exceptions)		
+			-	RESTful applications use many additional codes
+				-	Created successfully: 201
+				-	HTTP method not supported: 405
+				-	Cannot generate response body requested: 406
+				-	Request body not supported: 415
+										
+		-	@ResponseStatus:
+			-	Spring can place at class-level, applies to all methods
+			-	To return status code other than 200
+				-	Use HttpStatus enumerator
+			Note: @ResponseStatus on void methods
+				-	No longer want to return a view name - no View at all!
+				-	Method returns a response with empty body (no-content)
+				@PutMapping("orders/{}id")
+				@ResponseStatus(HttpStatus.NO_CONTENT)	// 204
+				public void updateOrder(...)	{
+					// Update order
+				}
+				
+	-	Accessing Request/Response Data:
+		-	The Problem:
+			-	HTTP GET needs to return data in response body
+			-	HTTP POST and PUT receive data in request body
+			-	Typically XML or JSON
+			-	Want to work with Java objects
+			-	Want to avoid converting between formats manually
+		-	The Solution
+			-	Use Marshaling via dedicated message-converters
+			-	Annotate incoming data with @RequestBody
+			-	Annotate outgoing data with @ResponseBody
+	
+	-	HttpMessageConverter:
+		-	Converts HTTP request/response body data
+			-	XML (using JAXP Source, JAXB2 mapped object, Jackson-Dataformat-XML)						
+			-	Jackson JSON, GSON Feed data such as Atom/RSS
+			-	Google protocol buffers
+			-	Form-based data
+			-	Byte[], String, BufferedImage				
+		-	Must enable otherwise no convertors defined at all!
+			-	Automatic with Spring Boot
+			-	@EnableWebMvc or <mvc:annotation-driven>
+			-	Or define explicitly (allows you to register extra convertors)
+				-	Using WebMvcConfigurer or <mvc />	
+				
+	-	@RequestBody
+		-	To use converters for incoming request data
+			-	Correct converter chosen automatically
+				-	Based on content type of request
+			-	updatedOrder could be mapped from XML (with JAXB2) or from JSON (with Jackson)
+				-	Annotate Order class to help JAXB/Jackson work
+				
+			@PutMapping(path="/orders/{id}") 
+			@ResponseStatus(HttpStatus.NO_CONTENT) // 204
+			public void updateOrder(@RequestBody Order updatedOrder,
+			                        @PathVariable("id") long id) {
+				   // process updated order data and return empty response
+				   orderManager.updateOrder(id, updatedOrder);
+			}		
+				
+	-	@ResponseBody:
+		-	Use converters for response data by annotating return data with @ResponseBody
+		-	Converter handles rendering a response
+			-	Again, no ViewResolver and View involved any more!			
+		@GetMapping(path="/orders/{id}") 
+		public @ResponseBody Order getOrder(@PathVariable("id") long id) {
+			// Order class is annotated with JAXB2's @XmlRootElement 
+			Order order= orderService.findOrderById(id);
+			// results in XML response containing marshalled order: 
+			return order;
+		}	
+		
+	-	@RestController Simplification:
+		@controler
+		public class OrderController {
+			@GetMapping(path="/orders/{id}")
+			public ￼ Order getOrder(@PathVariable("id") long id) {
+				return orderService.findOrderById(id); 
+			}
+			... 
+		}
+		@RestController
+		public class OrderController { 
+			@GetMapping(path="/orders/{id}")
+			public Order getOrder(@PathVariable("id") long id) {
+					^ No need for @ResponseBody on GET methods
+				return orderService.findOrderById(id); 
+			}
+			￼￼... 
+		}
+	
+-	Manipulating Response Data:
+	-	More on Request/Response Data
+		-	Can explicitly inject HttpServletRequest (and HttpServletResponse)
+			-	But makes Controller methods hard to test
+				-	Consider Spring's MockHttp... classes
+		-	Spring can automatically inject part of the request				
+			-	@RequestParam, @PathVariable, Principal, Local, @Value, @RequestHeader
+			-	@RequestBody, @ResponseBody
+		-	To perform REST we may also use
+			-	HttpEntity, ResponseEntity
+		
+	-	HttpEntity and ResponseEntity
+		-	To build responses explicitly
+			-	Set headers, control content returned
+			-	Use HttpEntity or ResponseEntity
+			
+		//Want to return a String as the response-body
+		HttpHeaders headers = new HttpHeaders(); 
+		headers.setContentType(MediaType.TEXT_PLAIN); 
+		HttpEntity<String> entity = new HttpEntity<String>("Hello Spring", headers);
+		// ResponseEntity (since Spring 4.1) supports a “fluent” API 
+		ResponseEntity<String> response = ResponseEntity.ok()
+							                    .contentType(MediaType.TEXT_PLAIN)
+							                    .body("Hello Spring");
+							                    
+	-	Setting Response Data:
+		-	Can use HttpEntity to generate Response
+			-	Avoid use of HttpServletRespose (easier to test)
+			
+		@GetMapping(path="/orders/{id}")
+		public HttpEntity<Order> getOrder(long id) {
+			  ^ No need for @ResponseBody	
+			  Order order = orderService.find(id);
+			return ResponseEntity 
+					 .ok()	<-- HTTP Status 200 OK
+					￼￼ .header("Last-Modified", order.lastUpdated())
+									^ Set custom header
+					 .body(order);
+					 		^ Response Body
+			￼￼}	
+			
+	-	Building URIs:
+		-	An HTTP POST typically returns location of newly created resource in the response header
+		-	How to create a URI?
+			-	UriComponentBuilder
+				-	Allows explicit creation of URI
+				-	But uses hard-coded URLs
+			-	ServletUriComponentsBuilder
+				-	Provides access to that URL that invoked the current controller method
+					
+	-	Building URIs: UriComponentBuilder
+		-	Support for building URIs from templated strings
+			-	Escapes illegal characters - such as %20 for a space
+			
+		String templateUrl = "http://store.spring.io/orders/{orderId}/items/{itemId}";	<-- But: use of hard-coded URL not recommended
+		URI location = UriComponentsBuilder. 
+						fromHttpUrl(templateUrl).
+			            buildAndExpand("123456","item A").
+			            toUri();
+			return ResponseEntity.created(location).build();<-- Convenient way to build POST response
+		
+		// http://store.spring.io/orders/123456/items/item%20A			
+		
+	-	Better: ServletUriComponentsBuidler
+		-	Use in a Controller method
+			-	Avoids hard-coding URL
+		
+		// Must be in a Controller method
+			// Example: POST 	/orders/{id}/items
+		URI location = ServletUriComponentsBuilder 
+				.fromCurrentRequestUri() 	<------ Framework puts request URL in current thread - which builder can access
+				.path("{itemId}") 
+				.buildAndExpand("item A")
+				.toUri(); ;
+		return ResponseEntity.created(location).build();
+       
+       // http://.../items/item%20A	
+      
+	-	Putting it all Together
+		-	We have covered many new concepts:
+			-	@ResponseStatus
+			-	HTTP Message Converters
+			-	@RequestBody, @ResponseBody
+			-	HttpEntity, ResponseEntity
+			-	ServletUriComponentsBuilder
+			     
+  		-	Let's see some typical Controller implementations for each of GET, POST, PUT and DELETE
+       		-	Useful reference when you are writing a new Controller
+       		
+		-	Retrieving a Representation: GET
+		
+			GET /store/orders/123				HTTP/1.1 200 OK
+			Host: shop.spring.io		-->		Data: ...
+			Accept: application/xml,			Content-Length: 1456
+												Content-Type: application/xml
+												<order id="123">
+													...
+												</order>
+			@GetMapping(path="/orders/{id}")
+			public @ResponseBody Order getOrder(@PathVariable("id") long id) {
+				return orderService.findOrderById(id); 
+			}
+			//@RequestMapping(path="/orders/{id}", method=RequestMethod.GET)
+			
+		-	Creating a new Resource: POST - 1
+		
+			POST /store/orders/123/items		HTTP/1.1 201 Created
+			Host: shop.spring.io				Date: ...
+			Content-Type: application/xml	-->	Content-Length: 0
+			<item>								Location: http://shop.spring.io/store/orders/123/items/abc
+				...
+			<item>	
+													
+			-	The most complicated to implement
+				-	Response needs Location header for new resource
+				-	Will need ServletUriComponentsBuilder and RequestEntity										
+								
+		-	Creating a new Resource: POST - 2
+		
+			@PostMapping(path="/orders/{id}/items") 
+			public ResponseEntity<Void> createItem (@PathVariable("id") long id, @RequestBody Item newItem) { 
+				// Add the new item to the order 
+				orderService.findOrderById(id).addItem(newItem);
+				// Build the location URI of the new item
+				URI location = ServletUriComponentsBuilder 
+						.fromCurrentRequestUri() 
+						.path("{itemId}") 
+						.buildAndExpand(newItem.getId()) 
+						.toUri();
+				// Explicitly create a 201 Created response
+				return ResponseEntity.created(location).build(); 
+			}
+			//@RequestMapping(path="/orders/...", method=RequestMethod.POST)											
+			
+		-	Updating Existing Resource: PUT
+		
+			PUT /store/orders/123/items/abc
+			Host: shop.spring.io					HTTP/1.1 204 No Content
+			Content-Type: application/xml	-->		Date: ...
+			<item>									Content-Length: 0 
+				...
+			</item>	
+			@PutMapping (path="/orders/{orderId}/items/{itemId}") @ResponseStatus(HttpStatus.NO_CONTENT) // 204
+			public void updateItem(@PathVariable("orderId") long orderId,
+			@PathVariable("itemId") String itemId, @RequestBody Item item) {
+			   orderService.findOrderById(orderId)
+			               .updateItem(itemId, item);
+			}
+			//￼@RequestMapping(path="/orders/...", method=RequestMethod.PUT)
+		
+		-	Deleting a Resource: DELETE
+		
+			DELETE /store/orders/123/items			HTTP/1.1 204 No Content
+			Host: shop.spring.io			---> 	Date: ...
+			...										Content-Length: 0
+			
+			@DeleteMapping(path="/orders/{orderId}/items/{itemId}") @ResponseStatus(HttpStatus.NO_CONTENT) // 204
+			public void deleteItem(@PathVariable("orderId") long orderId, @PathVariable("itemId") String itemId) { 
+				orderService.findOrderById(orderId).deleteItem(itemId);
+			}
+			//￼@RequestMapping(path="/orders/...", method=RequestMethod.DELETE)
+			
+-	RestTemplate:
+	-	Provides access to RESTful services
+		-	Supports all the HTTP methods
+					
+	HTTP Method					RestTemplate Method
+	DELETE			delete(String url, Object... urlVariables)
+	GET				getForObject(String url, Class<T> responseType, Object... urlVariables)
+	HEAD			headForHeaders(String url, Object....urlVariables)
+	OPTIONS			optionsForAllow(String url, Object...urlVariables)
+	POST			postForLocation(String url, Object request, Object....urlVariables)
+					postForObject(String url, Object request, Class<T> responseType, Object...urlVariables)
+	PUT				put(String url, Object request, Object...urlVariables)
+	
+	-	Defining a RestTemplate:
+		-	Just call constructor in your code
+			-	Setup default HttpMessageConverters internally
+				-	Same as on the Server, depending on classpath
+				
+		RestTemplate template = new RestTemplate();										
+		
+	-	RestTemplate usage Examples:
+	
+		RestTemplate template = new RestTemplate();
+		String uri = "http://example.com/store/orders/{id}/items";
+		
+		// GET all order items for an existing order with ID 1:
+		OrderItem[] items = template.getForObject(uri, OrderItem[].class, "1");
+																			^ {id} = 1
+		￼// POST to create a new item
+		OrderItem item = // create item object
+		URI itemLocation = template.postForLocation(uri, item, "1");
+																^ {id} = 1		
+		// PUT to update the item
+		item.setAmount(2);
+		template.put(itemLocation, item);
+		
+		// DELETE to remove that item again
+		template.delete(itemLocation);	
+		
+	-	Using HttpEntity and ResponseEntity
+		-	Access response headers and body
+		ResponseEntity<String> response = restTemplate.getForEntity(itemUrl, String.class);
+		assert(response.getStatusCode().equals(HttpStatus.OK));
+		String content = response.getBody();	<-- Body returned as String, but object mapping still an option	
+		
+	-	Setup your own request:	
+	
+		HttpEntity<OrderItem> request = new HttpEntity<>(item); 
+		request.getHeaders().add(HttpHeaders.AUTHORIZATION, "Basic " + getBase64EncodedLogPass());
+		ResponseEntity<Void> response = restTemplate .exchange(itemUrl, HttpMethod.POST, request, Void.class);
+		assert(response.getStatusCode().equals(HttpStatus.CREATED));
+		
+-	Summary:
+	-	REST is an architectural style that can be applied to HTTP-based applications
+	– 	Useful for supporting diverse clients and building highly scalable systems
+	
+	-	Spring-MVC adds REST support using a familiar programming model (but without Views)
+		-	@ResponseStatus, @RequestBody, @ResponseBody
+		-	HttpEntity, ResponseEnitity, UriComponentsBuilder
+		-	HTTP Message Converters
+	-	Clients use RestTemplate to access RESTful servers	
