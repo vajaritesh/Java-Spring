@@ -1,0 +1,409 @@
+Topic in this file:
+	-	Explain basic Security Concepts
+	-	Setup Sprig Security in a Web Environment
+	-	Configuring Web Authentication
+	-	Use Spring Security's Tag Libraries
+	-	Setup Method Security
+	
+-	Security Overview:
+	-	Principal:
+		-	User, device or system that performs an action
+	-	Authentication:
+		-	Establishing that a principal's credentials are valid
+	-	Authorization:
+		-	Deciding if a principal is allowed to perform an action
+	-	Authority:
+		-	Permission or credential enabling process (such as a role)
+	-	Secured Item:
+		-	Resource that is being secured
+
+	-	Authentication:
+		-	Many Authentication mechanisms
+			-	e.g. basic, digest, form, X.509
+		-	Many storage options for credential and authority information
+			-	e.g. Database, LDAP, In-memory (development)
+			
+	-	Authorization:
+		-	Authorization depends upon Authentication
+			-	Before deciding a user can perform action or not, its important to check if user is Authenticated
+		-	Authorization determines if you have the required Authority
+		-	The decision process is often based on roles
+			-	ADMIN	-	can cancel orders
+			-	MEMBER	-	can place orders
+			-	GUEST	-	can browse the catalog
+			A Role is simply commonly used type of Authority
+	
+	-	Motivation - 1:
+		-	Portable:
+			-	Secured archive (WAR, EAR) can be deployed as-is
+			-	Also works with Spring Boot or standalone
+			-	Uses Spring for Configuration
+		-	Separation of Concerns:
+			-	Business Logic is decoupled from Security concern
+			-	Authentication and Authorization are decoupled
+				-	Changes to Authentication process have no impact on Authorization		
+		-	Flexibility:
+			-	Supports all common authentication mechanisms
+				-	Basic, Form, X.509, Cookies, Single-Sign-On, etc.
+			-	Configurable storage options for user details (credential and authorities)
+				-	Properties file, RDBMS, LDAP, custom DAOs, etc.
+		-	Extensible:
+			-	All the following can be customized:
+				-	How a principal is defined
+				-	How authorization decisions are made
+				-	Where security constraints are stored
+				
+	-	Consistency of Approach:			
+			-	The goal of authentication is always the same
+				-	Regardless of the underlying mechanism
+				-	Establish a security context with the authenticated principal's information
+				-	Out-of-the-box this works for web applications
+			-	The Process of the Authorization is always the same
+				-	Regardless of the underlying mechanism
+				-	Consults the attributes of secured resource
+				-	Obtain principal information from security context
+				-	Grant or Deny access
+				
+	-	Spring Security Big Picture:
+														Delegates		
+		Authentication Manager 	AccessDecision Manager	<-------  Security Interceptor		
+					 	|	 		polls |							||		|		|
+			populate	|	 			  V					obtains	||protect	consults	
+						V			    Voters						V| 		|		|
+						---------------------------------------------|		|		|
+	Thread of ----->				Security Context				 |		|	Config Attributes
+	Execution						Authentication					 |		|		|
+								(Principal + Authorities)			 |		|		describes
+																	 |		|		|
+																	 |		V		V	
+																	 |	Secured Resource
+	
+-	Spring Security in a Web Environment:
+	-	Setup and Configuration:
+		-	Three Steps:
+			1)	Setup filter chain
+			2)	Configure security (authorization) rules
+			3)	Setup Web Authentication
+			
+	Note- Spring Security is NOT limited to Web Security, but that is all we will consider here, and it is configurable out-of-the-box.
+	
+	1)	Setup filter chain:
+		-	Implementation is a chain of Spring configured filters
+			-	Requires a DelegationFilterProxy which must be called springSecurityFilterChain
+			-	Chain consists of many filters
+		-	Setup a filter chain with one of these options
+			-	Spring boot does it automatically
+			-	Subclass AbstractSecurityWebApplicationInitializer
+			-	Declares as a <filter> in web.xml
+										
+	2)	Configuration in Application Context:
+		-	Extend WebSecurityConfigurerAdapter
+		@Configuration
+		@EnableWebSecurity
+		public class SecurityConfig extends WebSecurityConfigurerAdapter 	{
+			@Override
+			protected void configure(HttpSecurity http) throws Exception {
+								^ Web Specific Security settings
+			}
+			@Autowired
+			public void configureGlobal(AuthenticationManagerBuilder auth) throws Exception {
+								^	Global Security settings 
+			
+			}
+		}
+		
+		-	Authorizing URLs:
+			-	Define specific authorization restrictions for URLs
+			-	Support "Ant-style" pattern matching
+				-	"/admin/*" only matches "admin/xxx"
+				-	"/admin/**" matches any path under /admin
+					-	such as "/admin/database/access-control"	
+			protected void configure(HttpSecurity http) throws Exception {
+				http.authorizeRequests()
+					.antMatchers("/admin/**")..hasRole("ADMIN")
+									^						^ 
+	Match all URL starting with /admin (ANT-style path)		User must have ADMIN role		
+					...
+			}
+			
+		-	URL Matching:
+			-	antMatchers() vs  mvcMaters
+			http.authorizeRequests() 
+			// Only matches /admin
+			.antMatchers("/admin").hasRole("ADMIN")
+			// Matches /admin, /admin/, /admin.html, /admin.xxx			
+			.mvcMatchers("/admin").hasRole("ADMIN")				
+			
+			-	mvcMatchers
+				-	Newer API	
+				-	Uses same matching rules as @RequestMapping
+				-	More secure, recommended
+				
+				
+		-	more on authorizeRequests():
+			-	Chain multiple restrictions
+				-	Evaluated in the order listed
+					-	First match is used, put specific matches first
+			protected  void configure(HttpSecurity http) throws Exception { 
+				http
+				.authorizeRequests()
+				.mvcMatchers("/signup", "/about").permitAll()
+				.mvcMatchers("/accounts/edit*").hasRole("ADMIN") 
+				.mvcMatchers("/accounts/**").hasAnyRole("USER",”ADMIN”) 
+				.anyRequest().authenticated();
+								^
+								Must be authenticated for any other request
+												
+		-	Specifying login and logout
+			protected void configure(HttpSecurity http) throws Exception { 
+				http
+					.authorizeRequests() 
+						.mvcMatchers("/admin/**").hasRole("ADMIN")...			
+						.and()							// Method Chaining
+				.formLogin() 							// setup form-based authentication					
+					.loginPage("/login.jsp") 			// URL to use when login is needed
+					.permitAll()						// any user can access
+					.and()								// method chaining!!
+				.logout() 								// configure logout	
+					.logoutSuccessUrl("/home")			// go here after successful logout
+					.permitAll(); 						// any user can access
+			}
+							
+		-	An Example Login Page:
+			login-example.js
+			<c:url var=’loginUrl’ value=’/login’ />
+										^ URL that indicates an authentication request. Default: POST against URL used to display the page.
+			<form:form action=“${loginUrl}” method=“POST”>
+				<input type=“text” name=“username”/> <br/>
+										   	  ^	
+										   	  --------- The expected keys for generation of an authentication request token
+										  	  V
+				<input type=“password” name=“password”/> <br/>
+				<input type=“submit” name=“submit” value=“LOGIN”/> 
+			</form:form>		
+		
+		-	By-passing Security:
+			-	Some URLs do not need to be secure
+				-	such as static resources
+			-	Using permitAll() allows open-access
+				-	But still processed by Spring Security
+			-	Possible to skip security checks completely		
+			@Configuration
+			@EnableWebSecurity
+			public class SecurityConfig extends WebSecurityConfigurerAdapter	{
+				@Override
+				protected void configure(WebSecurity web) throws Exception {
+					web.ignoring().mvcMatchers("/css/**","/images/**","/javascript/**");
+															^ These URLs pass straight through, no checks
+				}
+				...
+			}		
+			
+		3)	Configure Authentication:
+			-	DAO Authentication provider is default
+				-	Expects a UserDetailsService implementation to provide credentials and authorities
+					-	Options: In-memory(properties), JDBC (database), custom
+					
+			-	LdapAuthenticationProvider
+				-	Integrate with OpenLDAP or Active Directory
+			
+			-	Or define your own Authentication Provider
+				-	Example: to get pre-authenticated user details when using single sign-on
+					-	CAS, TAM, SiteMinder
+								
+			-	Authentication Manager:
+				-	Use a UserDetailsManagerConfigurer
+					-	Some built in options:
+						-	In-memory (for quick testing), JDBC	
+					-	Or use your own UserDetailService implementation	
+					
+			@Autowired
+			Public void configureGlobal(AuthenticationManagerBuilder auth) throws Exception {
+							^ Not web-specific
+				auth
+					.inMemoryAuthentication() <-- Adds a UserDetailsManagerConfigurer
+						.withUser("hughie").password("hughie").roles("GENERAL").and() 
+						.withUser("dewey").password("dewey").roles("ADMIN").and() 
+						.withUser("louie").password("louie").roles("SUPPORT");
+									^				   ^			  ^
+								 login				password		Supported roles	
+			}
+			
+			
+			-	Sourcing Users from a Database - 1
+			
+				private DataSource dataSource;
+				@Autowired
+				public void setDataSource(DataSource dataSource) throws Exception { 
+					this.dataSource = dataSource;
+				}	
+				@Autowired
+				public void configureGlobal(AuthenticationManagerBuilder auth) throws Exception { 
+					auth.jdbcAuthentication().dataSource(dataSource):
+							^ Can customize queries using methods:
+							  usersByUsernameQuery()
+							  authoritiesByUsernameQuery()
+							  groupAuthoritiesByUsername() 
+				}
+			
+			-	Sourcing Users from a Database - 2
+				
+				-	Queries RDBMS for users and their authorities
+					-	Provides default queries
+						-	SELECT username, password, enabled FROM users WHERE username = ?
+						-	SELECT username, authority FROM authorities WHERE username = ?	
+				-	Groups also supported
+					-	groups, group_members, group_authorities tables
+				-	Advantage:
+					-	can modify user info while system in running	
+				
+			-	Password Encoding – 1:	[sha and md5 only suitable for testing. Too insure]
+				-	can encode passwords using a hash
+					-	sha256, bcrypt, (sha, md5,...)
+					-	Use with any authentication mechanism
+					auth.inMemoryAuthentication()
+						.passwordEncoder(new StandardPasswordEncoder())
+													^ SHA-256 by default		
+				-	Add "salt" string to make encryption stronger
+					-	Salt prepended to password before hashing
+					auth.jdbcAuthentication()
+						.dataSource(dataSource)
+						.passwordEncoder(new StandardPasswordEncoder("Spr1nGi$Gre@t"));
+																		^ encoding with a 'salt' string											
+			-	Password Encoding – 2: [BCryptPasswordEncoder is recommended - uses Blowfish]
+				-	BCrypt is recommended over SHA-256
+					-	Secure passwords further by specifying a "strength" (N)
+					-	Internally the hash is rehashed 2^N times, default is 2^10	
+					
+				auth.inMemoryAuthentication()
+					.passwordEncoder(new BCryptPasswordEncoder(12));<-- Encoding using 'strength' 12
+					
+				-	Store only encrypted passwords	
+				auth.inMemoryAuthentication()
+					.withUser("hughie")
+					.password("$2a$10$aMxNkanIJ...Ha.h5NKknelEuylt87PNlicYpI1y.IG0C.")
+					.roles("GENERAL")
+					
+			-	Other Authentication Options:
+				-	Implement a custom UserDetailsService
+					-	Delegate to an existing User repository or DAO
+				-	LDAP
+				-	X.509 Certificates
+				-	JAAS Login Module
+				-	Single-Sign-On
+					-	OAuth, SAML
+					-	SiteMinder, Kerberos
+					-	JA-SIG Central Authentication Service																	
+				Note: Authorization is not affected by changes to Authentication!	
+			
+			-	@Profile with Security Configuration:
+				-	Use in-memory provider				
+					public class SecurityBaseConfig extends WebSecurityConfigurerAdapter { 
+						protected void configure(HttpSecurity http) throws Exception {
+							http.authorizeRequests().mvcMatchers("/resources/**").permitAll(); 
+						}
+					}
+					@Configuration
+					@EnableWebSecurity				
+					￼@Profile(“development”)
+					public class SecurityDevConfig extends SecurityBaseConfig {
+						@Override
+						public void configureGlobal(AuthenticationManagerBuilder auth) throws Exception {
+							auth.inMemoryAuthentication() 
+								.withUser("hughie").password("hughie").roles("GENERAL");
+						} 
+					}		
+				-	Use Database provider
+					public class SecurityBaseConfig extends WebSecurityConfigurerAdapter { 
+						protected void configure(HttpSecurity http) throws Exception {
+							http.authorizeRequests().mvcMatchers("/resources/**").permitAll(); 
+						}
+					}
+					@Configuration
+					@EnableWebSecurity				
+					￼@Profile(“!development”)
+					public class SecurityDevConfig extends SecurityBaseConfig {
+						@Override
+						public void configureGlobal(AuthenticationManagerBuilder auth) throws Exception {
+							auth.jdbcAuthentication() 
+								.dataSource(dataSource);
+						} 
+					}	
+					
+-	Using Spring Security's Tag Library:
+	-	Tag Library declaration:
+		-	Spring Security library is declared as follows - Available since spring security 2.0
+		<%@ taglib prefix="security" url="http://www.springframework.org/security/tags" %> 					
+	-	Equivalent functionality for other view technologoies
+		-	Velocity, Freemarker, Thymeleaf, JSF...			
+		
+	-	Spring Security Tag Library:
+		-	Display properties of the Authentication object
+		You are logged in as:
+		<security:authentication property="principal.username" />	
+		
+	-	Hide sections of output based on role
+		<security:authorize ...>
+			TOP-SECRET INFORMATION
+			Click <a href="/admin/deleteAll">HERE</a>	
+												^ Content hidden from unauthorized users
+			to delete all records
+		</security:authorize>
+		
+	-	JSP Authorization:
+		-	Restrict by role explicitly
+			-	But puts role information in your web-page
+		<security:authorize access="hasAnyRole('USER','ADMIN')">
+													^ Required roles
+		-	Restrict via URL permission - preferred
+			-	Must specify @EnableWebSecurity (even with Spring Boots)
+		<security:authorize url="/admin/deleteAll">
+		http.authorizeRequests()
+			.mvcMatchers("/admin/*").hasAnyRole("USER","ADMIN")
+																
+-	Method Security:
+	-	Spring Security uses AOP for security at the method level
+		-	annotations based on Spring annotations or JSR-250 annotations
+		-	Java Configuration to activate detection of annotations
+	-	Typically secure your services
+		-	Do not access repositories directly, bypass security (and transactions)																		
+
+	-	Method Security - How it Works
+		-	Uses a Spring AOP Proxy
+		
+	-	Method Security - JSR - 250
+		-	Only supports role-based security
+			-	JSR-250 annotations must be enabled
+		@EnableGlobalMethodSecurity(jsr250Enabled=true)
+		￼import javax.annotation.security.RolesAllowed;
+		public class ItemManager { 
+			@RolesAllowed({"ROLE_MEMBER", "ROLE_USER"}) 	<-- Can also place at Class level
+			public Item findItem(long itemNumber) {
+				... 
+			}
+		}
+		Internally role authorities are stored with ROLE_ prefix. 
+		
+	-	Method Security with SpEL:
+		-	Use Pre/Post annotation for SpEL
+			@EnableGlobalMethodSecurity(prePostEnabled=true)
+		
+		import org.springframework.security.annotation.PreAuthorize;
+		public class ItemManager {
+			@PreAuthorize("hasRole('MEMBER') &&" + "#order.owner.id==principal.user.id")
+			public Item findItem(Order order, long itemNumber)	{
+				.....
+			}
+		}		
+		
+-	Summary:
+	-	Spring Security:
+		-	Secure URLs using a chain of Servlet filters
+		-	And/or methods on Spring beans using AOP Proxies
+	-	Out-of-the-box setup usually sufficient:
+		-	URL and/or method restrictions
+		-	How to login (typically using an HTML form)
+		-	Supports in-memory, database, LDAP, credentials (and more)
+		-	Password encryption using familiar hashing techniques
+		-	Support for security tags in JSP views
+		 				
