@@ -1,0 +1,287 @@
+-	Topic in this file:
+	-	Describe an Effective Web Application Architecture
+	-	Setup Spring for Web Applications
+	-	Describes the basics of Spring web
+	-	Explain the use of Spring with third-party web framework
+		
+-	Overview of Spring Web:
+	-	Introduction:
+		-	Web Layer Integration:
+			-	Spring provides support in the web layer:
+				-	Spring MVC, Spring WebFlow
+			-	However, you are free to use Spring with any Java web framework
+				-	Integration might be provided by Spring or by other framework itself
+				-	Spring also integrates with many of the common REST frameworks
+				
+		-	Effective Web Application Architecture:
+						Clients
+							|<------------------ Remote HTTP interfaces
+							|
+	Keep this ----->	Web Layer
+	layer thin				|<------------------ Local Java Business Interfaces
+							|
+						Application Layer						
+							(Spring)
+							
+					Java EE Servlet Container
+					
+		<-------------- JVM------------------>
+	
+	-	Using Spring in Web Applications:
+		-	Front Controller Pattern:
+			-	Single controller to handle all requests to Framework
+				-	Spring MVC uses DispatcherServlet
+				-	JSF uses FacetSerlvet
+				-	RestEasy uses HttpServletDispatcher
+				-	Struts uses an ActionServlet
+			-	All work with Spring
+				-	May use multiple servlets in same application
+				-	But don't want to load Application Context multiple times
+				-	Servlet's can't pass each other data
+			-	This is not allowed:
+				-	Spring MVC's servlet could load the application context
+				-	But other servlets can't ask it for its beans
+				-	Servlets "sandboxed" for safety
+				-	Not could any servlet Filters
+				Servlet Container
+				(Tomcat, Jetty, Undertow..)
+					Dispatcher		------>		Spring Beans 
+					Servlet				
+						^
+						|
+						X	
+						|
+					Some Other Servlets
+					
+	-	Spring Application Context - Life cycle in Web Applications
+		-	Initialize Spring within a web application
+			-	Set up business services, repositories			
+		-	Use a standard servlet listener
+			-	Initialization occurs before any servlets execute
+			-	Application ready for user requests
+			-	ApplicationContext.close() is called when the application is stopped
+			
+		-	ContextLoaderListener:
+			-	Spring web "Bootstrap":
+				-	Loads shared application context before any Servlets or Filters start up
+				-	Shared via Container's ServletContext
+				-	ApplicationContext.close() is called when the application is closed
+				
+				Servlet Container:
+				
+				Some Filters			<---	|
+												|
+				Dispatcher Servlet		<---	|
+												|Servlet Context	<---> Spring Beans
+				SomeOther Servlet		<---	|
+												|
+				Context Loader			---->	|	
+					Listener					|
+										
+		-	Configuration Option:
+			-	Servlet 3 Initializer:
+				-	Spring automatically loads any class implementing
+					WebApplicationInitializer
+			-	Servlet 2 XML
+				-	Define as <listener> in web.xml 		 					
+		
+			-	Configuration WebApplicationInitializer:
+			
+				public class MyWebAppInitializer extends AbstractContextLoaderInitializer	{
+															^ Implements WebApplicaitonInitializer Automatically detected by servlet container.
+					@Override
+					protected WebApplicationContext createRootApplicationContext()	{
+						//Create the 'root' Spring application context
+						AnnotationConfigWebApplicaitonContext rootContext = new AnnotationConfigWebApplicaitonContext();
+						rootContext.getEnviroment().setActiveProfiles("jpa");
+						rootContext.register(RootConfig.class)	<--- Multiple classes may listed 
+						return rootContext   
+					} 
+				} 
+				Sets up ContexLoaderListener using context under. Spring's ApplicationContext loaded into ServletContext before any Servlets are initialized
+				
+		-	Configuration: web.xml
+			-	Only option prior to servlet 3.0
+				-	just use Spring's servlet listener
+				web.xml:	
+				<context-param> 
+					<param-name>contextConfigLocation</param-name> 
+					<param-value>
+						/WEB-INF/merchant-reporting-webapp-config.xml
+												^ The application context’s configuration file(s)
+					</param-value> 
+				</context-param>
+				<listener> 
+					<listener-class>
+						￼￼org.springframework.web.context.ContextLoaderListener
+					</listener-class> 
+				</listener>
+				Loads the ApplicationContext into the ServletContext before any Servlets are initialized
+				
+		-	web.xml Configuration Options
+			-	Default resource location is document-root
+				-	can use classpath: designator
+			<context-param> 
+				<param-name>contextConfigLocation</param-name> 
+				<param-value>
+					classpath:/rewards/internal/application-config.xml
+					/WEB-INF/merchant-reporting-webapp-config.xml
+														^ Multiple files may be listed
+				</param-value> 
+			</context-param> 
+			<context-param>
+				<param-name>spring.profiles.active</param-name>
+				￼<param-value>jpa</param-value>	<--- Optionally specify profile(s) to use
+			</context-param>
+			
+		-	Servlet Container after Starting up:
+				Root ApplicationContext Bound in ServiceContext under a well-known name
+									|
+									V
+					Now accessing to any Servlet or other web-layer artifact
+					
+		-	Accessing Spring Beans in Servlet:
+			-	Use WebApplicationContextUtils
+				-	gets Spring ApplicaitonContext from ServletContext
+				public class TopSpendersReportGenerator extends HttpServlet	{
+					private ClientService clientService;
+					public void init()	{
+						ApplicationContext context = WebApplicationContextUtils.getRequiredWebApplicationContext(getServletContext());
+						clientService = (ClientService) context.getBean("clientService");
+					}
+					...
+				}
+		-	Spring MVC Supports Dependency Injection:
+			-	Example using Spring MVC
+			@Controller
+			public class TopSpendersReportController {
+				private ClientService clientService;
+				@Autowired 
+				public TopSpendersReportController(ClientService service) {
+														^ dependency is automatically injected by type
+					this.clientService = service;
+				} 
+			}
+			Spring MVC's own Servlet access ApplicationContext for you. 
+			No need for low-level WebApplicationContexUtils
+
+-	Overview of Spring Web:
+	-	Spring Web:
+		-	Spring MVC:
+			-	Web Framework bundle with Spring
+		-	Spring WebFlow:
+			-	Plugs into Spring MVC
+			-	Implements navigation flows
+		-	Spring Mobile:
+			-	Routing between mobile/non-mobile version of site
+		-	Spring Social:
+			-	Easy integration with Facebook, Twitter, etc.		
+	
+	-	Spring Web MVC:
+		-	Spring's web framework 
+			-	uses Spring for its own configuration
+			-	Controllers are spring beans
+			-	testable artifacts
+		-	Annotation-based model since Spring 2.5
+		-	Builds on the Java Servlet API
+		-	The core platform for developing web applications with Spring
+			-	All higher-level module such as WebFlow and Spring REST build on it
+		
+	-	Spring Web Flow:
+		-	Plugs into Spring Web MVC as a Controller technology for implementing stateful "flows"
+			-	Checks that users follow the right navigaion path
+			-	Manages back button and multiple windows issues
+			-	Provides scopes beyond request and session
+				-	such as flow and flash scope
+			-	Addresses the double submit-problem elegantly
+			
+		Example: Online Check-In
+		-	Flow Declared in XML
+			<flow ...>
+				<view-state id="enterPassengerInfo">
+					<transition on="findItinerary" to="reviewItinerary" />
+				</view-state>
+				<view-state id="reviewItinerary">
+					<transition on="viewSeat" to="chooseSeat" /> 
+					<transition on="accept" to="finish" />
+				</view-state>
+				<view-state id="chooseSeat">
+					<transition on="findSeat" to="finish" />
+				</view-state>
+				<end-state id="finish"/> 
+			</flow>
+					
+						enterPassengerInfo
+								|findItineary
+								V
+							reviewItinerary
+				viewSeat	|			|
+							V			|	accept
+						chooseSeat		V
+							|------->  finish
+							findSeat
+							
+-	Spring and Other Web Frameworks:
+	-	Spring - Struts 2 Integration
+		Java Configuration:
+		@Action("/doLogin")
+		@ResultPath("WEB-INF/views")
+		@Result(name="success", location="LoginSuccess.jsp" )
+		@Result(name="error", location=":LoginError.jsp:")
+		public class DoLoginAction extend ActionSupport {
+			@Autowired	<--- Inject Spring Bean in normal way
+			private UserDAO userDAO;
+			private User user;
+			...
+			public String execute() {
+				if(userDAO.checkLogin(user)) {
+					return SUCCESS;
+				}
+				return ERROR;
+			}
+		}		
+	-	Spring - Struts 2 Integration
+		XML Configuration:
+			-	Integration plug-in provided by Struts 2 framework
+			<struts>
+				<!-- Define Spring as the object factory -->
+				<constant name="struts.objectFactory" value="spring" />
+				...
+			</struts>
+			<struts>
+				<include file="struts-default.xml"/>
+				<package name="secure" namespace="/secure" extends="default"> 
+					<action name="example" class="myBean">
+					￼	<result>example.ftl</result> 
+					</action>
+				</package> 
+			</struts>
+			
+	-	Spring - JSF Integration:
+		-	Two options
+			-	Spring-centric integration
+				-	Provided by Spring Faces sub-project of Spring Web Flow
+			-	JSF-centric integration
+				-	Spring plugs in as the JSF managed bean provider
+			<managed-bean>
+				<managed-bean-name>userList</managed-bean-name> 
+				<managed-bean-class>com.springsource.web.ClientController</managed-bean-class> 
+				<managed-bean-scope>request</managed-bean-scope>
+				<managed-property>
+					<property-name>userManager</property-name>
+					<value>#{userManager}</value> 
+				</managed-property>
+			</managed-bean>		
+			
+	-	Integration with Other Frameworks:
+		-	Wicket:
+			-	Comes with an integration to Spring
+		-	Tapestry 5
+			-	Provides a dedicated integration module for Spring	
+			
+-	Summary:
+	-	Spring can be used with any web framework
+		-	Spring provides the ContextLoaderListener that loads your spring beans
+	-	Spring MVC is a light weight web framework where controllers are Spring beans
+		-	More about Spring MVC in the next module - Spring Web MVC Essential
+	-	Spring has several web-related projects 					
