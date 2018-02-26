@@ -1,0 +1,365 @@
+-	What is Microservices Architecture:
+	-	Introduction
+		-	"Microservices" is not a new word
+			-	Term coined in 2005 by Dr Peter Rodgers
+				-	Then called "micro web services" and based on SOAP
+			-	Term started to become popular since 2010
+				-	Proposed by a group of architects in Venice during 2011
+				-	Used in 2012 in a presentation from James Lewis
+				-	Meanwhile Adrian Cockcroft(Netflix), was describing this approach as "fine grained SOA"
+				
+	-	Without Microservices:
+		-	Using a "monolith" architecture
+			-	All-in-One application
+		
+			Client				Web				Mobile
+			----------------------|----------------|-------------
+								  |				   |
+								  V				   V
+			Server				 Shopping Application
+								  Store, Config, Cart...
+								  			|
+								  			V
+								  		DataBase							
+								  		
+	-	With Microservices:
+		-	Many application divided into a set of sub-applications
+			-	called microservices
+			
+		Client					Web				Mobile
+		----------------------|----------------|-------------
+								  |				   |
+		Server					  V				   V
+		-----------------------------------------------------								  
+						API Gateway(s)
+		-----------------------------------------------------
+			|					|					|
+			V					V					V
+		  Store		<---->	 Catalog  <---------> Cart
+		    |					|					|
+		    V					V					V
+		  Store DB			Products DB				CartDB   					
+						
+						
+-	Pros & Cons of Microservices
+	-	Core Spring Concepts : Applied to Application Architecture
+	-	Spring enables separation-of-concerns
+		-	Loose Coupling: Effect of change is isolated
+		-	Tight Cohesion: Code performs a single well-defined task
+	-	Microservices exhibit the same strengths
+		-	Loose Coupling
+			-	Applications are build from collaborating services (processes)
+			-	Can change independently so long as protocols unchanged
+		-	Tight Cohesion
+			-	An application (service) that deals with a single view of data
+			-	Also knows as "Bounded Contexts" (Domain-Driven Design)
+
+	-	Microservice Benefits:
+		-	Smaller code base is easy to maintain
+		-	Easy to scale
+			-	Scale individual component
+		-	Technology diversity
+			-	Mix libraries, frameworks, data storage, languages
+		-	Fault Isolation
+			-	Component failure should not bring whole system down
+		-	Better support for smaller, parallel teams
+		-	Independent deployment
+		
+	-	Microservice Challenges:
+		-	Difficult to achieve strong consistency across services
+			-	ACID transactions do not span multiple processes
+			-	Eventual consistency, Compensating transactions
+		-	Distributed system				
+			-	Harder to debug/trace
+			-	Greater need for end-toend testing
+			-	Expect, test for and handle the failure of any process
+			-	More components to maintain: redundancy, HA
+		-	Typically requires "cultural" change( (Dev Ops)
+			-	How applications are developed and deployed
+			-	Devs and Ops working together, even on same team!	
+	
+	-	Use a Platform to Support This:
+		-	Platforms like Pivotal Cloud Foundry aid deployment
+			-	Easily run, scale, monitor and recover multiple processes
+			-	Run up a complete dev system for end-to-end testing
+		-	Support for
+			-	Continuous Deployment
+			-	Rolling upgrades of new versions of code
+				-	Also termed: Blue/Green or Canary rollout
+				-	Quick rollback in case of defects
+			-	Running multiple versions of same service at same time
+				-	Makes migration easiser for downstream projects					
+															
+						
+-	Developing Microservices:
+	-	Microservice Infrastructure:
+		-	Multiple processes working together
+		-	Issues that now arise:
+			-	How do they find each other?	(Service Discovery)
+			-	How do we decide which isntance to use?	(Client-side Load Balancing)
+			-	What happens if a microservice is not responding? (Fault Tolerance)
+			-	How do we control access?	(OAuth, ...)
+			-	How do they communicate?	(Messaing Service)
+			-	To just name a few!						
+		
+			Note- We only cover Service Discovery and Client-Side Load Balancing
+			
+	-	Microservices made-easy by Spring:
+		-	Setup a new service using Spring Boot
+		-	Expose resources via a RestController
+		-	Consume remove services using RestTemplate
+		-	Will leverage capabilities from Spring Cloud Project
+					
+		-	What is Spring Cloud:
+			-	Building blocks for Cloud and Microservices applications:
+				-	Microservices Infrastructure
+					-	Provides useful services such as Service Discovery, Configuration Server and Monitoring
+				-	Several based on other Open Source projects
+					-	Netfix OSS, HashiCorp's Consul,...
+				-	Platform Support
+					-	Access platform-specific information and services
+						-	Available for Cloud Foundry, AWS and Heroku				
+				-	Uses Spring Boot style starters
+					-	Requires Spring Boot to work
+					
+		-	Spring Cloud Usage Example:
+			-	There are many use cases supported by Spring Cloud
+				-	Cloud Integration, Dynamic Reconfiguration, Service Discovery, Security, Data Integration
+			-	Today we concentrate on microservices support
+				-	Service Discovery
+					-	How do the services find each other?
+				-	Client Side Load Balancing
+					-	Each service typically deployed as multiple instances
+						-	For fault-tolerance and load-sharing
+					-	How do we decide which service instance to use?
+			
+			-	Why we need Service Discovery - 1
+				-	Various protocols may be used 
+					-	But how do the two services find each other?
+					-	What happens if we run multiple instances?
+						  REST Request
+	Need 		Checkout ------------->	Cart <-- Multiple Instances for Throughput and Resilience
+Service		--->Service	 <-------------	Service							
+Discovery			|		JSON    ^		|	
+					|				|		|
+					|				which 	|
+					V				instance|
+				Order DB					|
+											V
+										Cart DB										  								  		
+										
+										
+			-	Why we need Service Discovery - 2:
+				-	With Service Discovery
+					
+	1.	Register	-->	Discovery Service<--	2. Register	
+		Checkout 	|						|		Cart 
+		Service		|	  					|		Service
+					|						|
+	3. Find Cart 	|						|
+		Service		|						|
+					|	 REST Request		|
+	Need 		Checkout ------------->	Cart <-- Multiple Instances for Throughput and Resilience
+Service		--->Service	 <-------------	Service							
+Discovery			|		JSON    ^		|	
+					|				|		|
+					|				4 Make 	|
+					V			a request	|
+				Order DB					|
+											V
+										Cart DB							
+										
+										
+		-	Implementing Service Discovery:
+			-	Spring Cloud supports several
+				-	We will use Eureka
+					-	Created by Netflix
+				-	Consul.io is another opion
+					-	Hashicorp project (inventor of Vargrant)
+			-	Spring Cloud makes it easy
+				-	To utilize either of those servers
+				-	Hiding their internal complexity
+				 		
+		-	Implementing Client-Side Load Balancing:
+			-	Discovery server may return the location of multiple instances
+				-	Recall: multiple instance for resilience and load-sharing
+				-	Client needs to pick one
+			-	We will use Netflix Ribbon
+				-	Provides severla algorithms for client side load balancing
+			-	Spring provides a smart RestTemplate
+				-	Service-discovery and load-balancing built-in
+				-	@LoadBalanced
+	
+-	Building a Simple Microservice System:
+	-	Simple Microservice System:
+	
+						   Lookup								Register
+							-------->	Discovery Server	<-------
+							|				(Eureka)				|
+							|										|
+							|										|
+	Browser 1	--->	Front-End	  RESTful		
+	....					Web		--------------------	Accounts		------> Account DB
+	Browser n	--->	Application	   API					MicroService
+									requests
+						(Consumer)	--------------->		(Producer)
+									data from
+									
+	-	Building Simple Microservice System:
+		A)	Run a Discovery Service
+			-	We will see how to create Eureka Discvoery Service
+		B)	Run a Microservice (the Producer)
+			-	Ensure it register itself with the Discovery Service
+			-	Registers its logical service name with A			
+		C)	How to Microservice Consumers find Servcie B?			
+			-	Discovery client using a "smart" RestTemplate
+				-	Spring perform service look up for you
+				-	Uses logical service names in URLs
+			
+		Dependencies for A, B & C. Spring Cloud is based on Spring Boot										
+		Maven Dependencies:
+		
+		￼<parent>
+			<groupId>org.springframework.cloud</groupId>	<--- Parent 
+			<artifactId>spring-cloud-starter-parent</artifactId> 
+			<version>Brixton.SR4</version>
+						^ “Release train” = a consolidated set of releases
+		</parent> 
+		￼￼￼￼<dependencies>
+			<dependency>		
+		       <groupId>org.springframework.boot</groupId>
+		       <artifactId>spring-boot-starter-web</artifactId>
+		   </dependency>
+		   <dependency>
+		        <groupId>org.springframework.cloud</groupId>
+		        						^ Spring Cloud
+		        <artifactId>spring-cloud-starter</artifactId>
+		   </dependency>
+		   <dependency>
+		        <groupId>org.springframework.cloud</groupId>
+		        <artifactId>spring-cloud-starter-eureka</artifactId>
+		        			^ Access Eureka registry server 
+			</dependency>
+		￼￼￼￼￼￼￼￼￼￼￼￼￼￼￼</dependencies>	
+		
+	A) 	Eureka Server using Spring Cloud
+		-	All you need to implement your own registry server!
+		application.yml:
+			server:	
+				port: 8761
+	
+			eureka:
+				instance:
+	  				hostname: localhost
+	  
+				client:  # Not a client
+				  	registerWithEureka: false
+		 	 		fetchRegistry: false			
+	 	Main.java:
+		@SpringBootApplication
+		@EnableEurekaServer
+		@EnableEurekaServer
+		public class EurekaApplication {			
+			public static void main(String[] args) {				
+				SpringApplication.run(EurekaApplication.class, args);
+			}
+		}
+		pom.xml:		
+		￼<dependency>		
+    		<groupId>org.springframework.cloud</groupId>   
+			<artifactId>spring-cloud-starter-eureka-server</artifactId>
+		</dependency>
+		
+	B)	Accounts Producer Microservice: Perform Service Registration
+		-	Microservice declares itself as an available resource
+			-	Using @EnableDiscoveryClient
+			-	Registers using its application name
+		
+		@SpringBootApplication		
+		@EnableDiscoveryClient		
+		public class AccountsApplication {		
+		    public static void main(String[] args) {		    		        
+		        SpringApplication.run(Application.class, args);
+			}
+		}
+		
+		spring:
+			￼application:
+			name: accounts-microservice	<---- Service Name			
+		eureka:
+			client:
+				￼serviceUrl:
+					defaultZone: http://localhost:8761/eureka/
+											^ Eureka Server URL
+
+			 	
+	C)	Consumer Service - Step 1: Enable our consumer to find the producer
+		-	Same annotation also allows service lookup
+		@SpringBootApplication
+		@EnableDiscoveryClient	<-- Same annotation as B) - allows us to query Discovery Server to find microservices
+		public class FrontEndApplication	{
+			public static void main(Strings[] args)	{
+				SpringApplication.run(Application.class, args);
+			}
+			//Will send this template to access the microservice 
+			//Spring will enhance this to do service discovery
+			@Bean 
+			@LoadBalaced
+			public RestTemplate restTemplate()	{
+				return new RestTemplate();
+			}
+		}
+	C)	Consumer Service - Step 2: Let our consumer use the producer
+		@Service
+		public class RemoteAccountManager implements AccountService {
+			// Spring injects the “smart” service-aware template
+			// defined on previous slide
+			// It performs a load-balanced lookup (see next slide)
+			@Autowired
+			@LoadBalanced
+			RestTemplate restTemplate;
+
+			public Account findAccount(String id) {
+				// Fetch data
+				return restTemplate.getForObject
+				("http://accounts-microservice/accounts/{id}", Account.class, id);
+								^ Service name
+				
+			￼￼}
+		 }
+
+		-	Load Balanced RestTemplate
+			-	Create using @LoadBalanced and @Qaulifier
+				-	Spring enhances it to do service lookup & load-balancing
+			@Bean
+			@LoadBalanced
+			public RestTemplate restTemplate {
+				return new RestTemplate();
+			}
+			
+			-	Inject using @Qualifier
+				-	If there are multiple RestTemplates you get the right one
+				-	Can be used to access multiple microservices
+				@Autowired
+				@LoadBalanced
+				RestTemplate restTemplate;
+				
+		-	Load Balancing with Ribbon:
+			-	Spring "smart" RestTemplate automatically integrate two Netflix utilities
+				-	"Eureka" service discovery
+				-	"Ribbon" client-side load-balancer		
+			-	End Resut
+				-	Eureka returns the URL of all available instances
+				-	Ribbon determines the best available service to use
+			-	Just inject the load-balanced RestTemplate
+				-	Automatically look up by logical service-name
+				
+		-	Spring Cloud Resources:
+			-	We have covered only a few Spring Cloud features
+				-	Project Home page
+					-	http://projects.spring.io/spring-cloud
+				– 	Matt Stine's free book on Cloud Native Architectures
+					-	https://pivotal.io/platform/migrating-to-cloud-native-application-architectures-ebook 
+				– 	Spring Blog article
+					-	https://spring.io/blog/2015/07/14/microservices-with-spring
+										 
