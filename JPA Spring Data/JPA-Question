@@ -1,0 +1,124 @@
+1) Introduction to JPA:
+	-	The Java Persistence API is designed for operating on domain objects
+		-	Defined as POJO entities
+		-	No special interface required
+	-	A common API for object-relational mapping
+	
+2) JPA Mapping:
+	-	JPA requires metadata for mapping classes/fields to database tables/columns
+	-	Usually provided as annotations
+	-	XML mappings also supported (orm.xml)			
+	-	JPA metadata relies on defaults
+	
+3) What can you annotate?
+	-	Classes:
+		-	Applies to the entire class (such as table properties)
+	-	Fields:
+		-	Typically mapped to column
+		-	By default, all treated as persistent
+			-	Mapping will be defaulted
+			-	Unless annotated with @Transient (non-persistent)																		
+		-	Properties(getters)
+			-	Also mapped to a column
+			-	Annotate getters instead of fields
+	- Only @Entity and @Id are mandatory
+			
+4) JPA Querying?
+	-	JPA provides several options for accessing data
+		-	Retrieve an object by primary key
+			Customer customer = entityManager.find(Customer.class, customerId);
+			
+		-	Query for object using JPA Query Language (JPAQL)
+			Need to use select clause, can't use * like select * from etc.
+			TypedQuery<Customer> query = entityManager.createQuery("select c from Customer c where c.address.city= :city", Customer.class);
+			query.setParameter("city", "Chicago");
+			List<Customer> customers = query.getResultList();		// Multiple Customers
+								OR
+			Customer customer = query.getSingleResult();			// Single Customer
+							
+		-	Query for objects using Criteria Queries			
+		
+		-	Execute SQL directly to underlying database
+				-	"Native" queries, allow DBMS-specific SQL to be used
+				
+5) Steps to using JPA with Spring:
+	1.	Define an EntityManagerFactory bean
+	2.	Define a DataSource bean
+	3.	Define a Transaction Manager bean
+	4.	Define Mapping Meta-data 
+	5.	Define DAOs				
+			
+	LocalContainerEntityManagerFactoryBean uses DataSource to create EntityManagerFactory,
+	EntityManagerFactory creates EntityManager
+	Services/Repository uses this EntityManger to execute the SQL
+	
+6) Spring Data JPA:
+	-	Step 1: Annotate Domain class
+		-	define keys & enable persistence
+	-	Step 2: Define your repository as interface
+		
+	-	Spring will implement it at run-time			
+		-	Scans for interfaces extending Spring's Repository<T,K>
+		-	CRUD methods auto-generated
+		-	Paging, custom queries and sorting supported
+		-	Validations exits for most Spring Data sub-projects
+			
+	-	Step 1:	Annotate Domain class (here we are using JPA)
+		-	Annotate JPA Domain object as normal
+			-	Domain Class:
+				@Entity
+				@Table(...)
+				public class Customer {
+					@Id
+					@GeneratedValue(strategy = GenerationType.AUTO) 
+					private Long id;
+					private Date orderDate;
+					private String email;
+					// Other data-members and getters and setters omitted
+				}
+	-	Step 2: Define Repository Interface
+		-	Must extend Repository<T,ID>
+			public interface Repository<T,ID> { }	<--	 Marker Interface - add any methods from CrudRepository and/or add custom finders
+			public interface CrudRepository<T, ID extends Serializable> extends Repository<T,ID> {
+				// You get all these methods automatically
+				public <S extends T>save(S entity);
+				public <S extends T>Iterable<S> save(Iterable<S> entities);					
+				public T findOne(ID id); 
+				public Iterable<T> findAll();
+				public void delete(ID id); 
+				public void delete(T entity); 
+				public void deleteAll();
+			}			
+			￼PagingAndSortingRepository<T, K> 
+				Iterable<T> findAll(Sort) 
+				Page<T> findAll(Pageable)
+										 			
+										 			
+7) Generating Repositories:
+	-	Spring scans for Repository interfaces
+		-	Implements them and add them as spring bean
+			-	Java Configuration:
+				@Configuration
+				@EnableJpaRepositories(basePackages="com.acme.**.repository")
+				@EnableMongoRepositories(...)
+				public class MyConfig	{ ... }
+			-	XML:
+				<jpa:repositories base-package="com.acme.**.repository" />
+				<mongo:repositories base-package="com.acme.**.repository" />
+				<gfe:repositories base-package="com.acme.**.repository" />
+				
+	-	Defining a JPA Repository:
+		-	Auto-generated finders obey naming convention
+			-	find(First)By<DataMember><Op>
+			-	<Op> can be GreaterThan, NotEquals, Between, Like...
+				
+		public interface CustomerRepository extends CrudRepository<Customer, Long> {
+			
+				public Customer findFirstByEmail(String someEmail); // No <Op> for Equals 
+				public List<Customer> findByOrderDateLessThan(Date someDate);
+				public List<Customer> findByOrderDateBetween(Date d1, Date d2);
+				
+				@Query(“SELECT c FROM Customer c WHERE c.email NOT LIKE '%@%'”)
+								^ Custom query uses query-language of underlying product (here JPQL)
+				public List<Customer> findInvalidEmails(); 
+			}										 			
