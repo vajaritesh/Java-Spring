@@ -1,0 +1,70 @@
+1) How it looks like using Spring's JDBC Template
+Answer: Mainly 4 steps:
+		-	Configuration
+		-	Query execution
+		-	Working with result sets
+		-	Exception handling
+			
+2) JDBC Template in nutshell:
+Answer:	These all handle by Spring:
+		-	Acquisition of the Connection
+		-	Participation in the Transaction
+		-	Execution of the statement
+		-	Processing of the result set
+		-	Handling any exceptions
+		-	Release of the Connection	
+			
+2) Benefit of JDBC Template
+Answer:
+		-	Eliminates repetitive boilerplate code
+		-	Alternatives common cause of bugs
+		-	Handles SQLExceptions properly
+
+		
+4)	Creating JdbcTemplate:
+		-	JdbcTemplate requires a DataSource
+			JdbcTemplate template = new JdbcTemplate(dataSource);
+		-	Create a template once and re-use it
+			-	Do not create one for each thread
+			-	Thread safe after construction
+5) Querying with JdbcTemplate:
+	-	JdbcTemplate can query for 
+			-	Simple types (int, long, String, Date, ...)
+			-	Generic Maps
+			-	Domain Objects					
+		
+6) Query for Simple types (int, long, String, Date,...) :
+	-	Query with no bind variables: queryForObject
+	-	Query with Bind variables:
+			 		
+7)	Generic Queries:
+	-	JdbcTemplate returns each row of a ResultSet as a Map
+		-	When expecting a single row:
+			-	Use queryForMap(..)
+		-	When expecting multiple rows:
+			-	Use queryForList(..)
+			
+8) Domain Objects:			
+	-	RowMapper:
+		-	Spring provides RowMapper interface for mapping a single row of ResultSet to an object
+			-	can be used for both single and multiple row queries
+	-	RowCallbackHandler:
+			-	Spring provides a simple RowCallbackHandler interface when there is no return object
+				-	Steaming rows to file
+				-	Converting rows to XML
+				-	Filtering rows before adding to a collections
+					-	but filtering in SQL is much more efficient
+				-	Faster than JPA equivalent for big queries
+					-	avoids result-set to object mapping			
+	-	ResultSetExtractor:
+			-	Spring provides a ResultSetExtractor interface for processing an entire ResultSet at once
+				-	You are responsible for iterating the ResultSet
+					-	e.g. for mapping entire ResultSet to a single object					
+
+9) Summary of Callback Interfaces:
+	-	RowMapper:
+		-	Best choice when each row of a ResultSet maps to a domain object
+	-	RowCallbackHanlder:
+		-	Best choice when no value should be returned from the callback method for each row, especially large queries
+	-	ResultSetExtractor:		
+		-	Best choice when multiple rows of ResultSet map to a single object					
