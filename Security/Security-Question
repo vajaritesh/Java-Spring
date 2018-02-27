@@ -1,0 +1,120 @@
+1)	Spring Security in a Web Environment:
+	-	Setup and Configuration:
+		-	Three Steps:
+			1)	Setup filter chain
+			2)	Configure security (authorization) rules
+			3)	Setup Web Authentication
+			
+	1)	Setup filter chain:
+		-	Implementation is a chain of Spring configured filters
+			-	Requires a DelegationFilterProxy which must be called springSecurityFilterChain
+			-	Chain consists of many filters
+		-	Setup a filter chain with one of these options
+			-	Spring boot does it automatically
+			-	Subclass AbstractSecurityWebApplicationInitializer
+			-	Declares as a <filter> in web.xml
+			
+	2) Configure security (authorization) rules:	
+		Configuration in Application Context:
+		-	Extend WebSecurityConfigurerAdapter
+		@Configuration
+		@EnableWebSecurity
+		public class SecurityConfig extends WebSecurityConfigurerAdapter 	{
+			@Override
+			protected void configure(HttpSecurity http) throws Exception {
+								^ Web Specific Security settings
+			}
+			@Autowired
+			public void configureGlobal(AuthenticationManagerBuilder auth) throws Exception {
+								^	Global Security settings 
+			
+			}
+		}
+		
+	3)	Setup Web Authentication:
+		-	DAO Authentication provider is default
+			-	Expects a UserDetailsService implementation to provide credentials and authorities
+				-	Options: In-memory(properties), JDBC (database), custom
+					
+		-	LdapAuthenticationProvider
+			-	Integrate with OpenLDAP or Active Directory
+			
+		-	Or define your own Authentication Provider
+			-	Example: to get pre-authenticated user details when using single sign-on			
+								
+		-	Authentication Manager:
+			-	Use a UserDetailsManagerConfigurer							
+
+2) Authorizing URLs:
+	-	Define specific authorization restrictions for URLs
+	-	Support "Ant-style" pattern matching
+		-	"/admin/*" only matches "admin/xxx"
+		-	"/admin/**" matches any path under /admin	
+			-	such as "/admin/database/access-control"
+			
+	-	antMatchers() vs  mvcMaters
+			http.authorizeRequests() 			
+			.antMatchers("/admin").hasRole("ADMIN")		// Only matches /admin
+			http.authorizeRequests() 			
+			.mvcMatchers("/admin").hasRole("ADMIN")		// Matches /admin, /admin/, /admin.html, /admin.xxx				
+			
+	-	mvcMatchers
+		-	Newer API	
+		-	Uses same matching rules as @RequestMapping
+		-	More secure, recommended
+		
+	-	Chain multiple restrictions
+			-	Evaluated in the order listed
+				-	First match is used, put specific matches first
+		protected  void configure(HttpSecurity http) throws Exception { 
+			http
+			.authorizeRequests()
+			.mvcMatchers("/signup", "/about").permitAll()
+			.mvcMatchers("/accounts/edit*").hasRole("ADMIN") 
+			.mvcMatchers("/accounts/**").hasAnyRole("USER",”ADMIN”) 
+			.anyRequest().authenticated();
+							^
+							Must be authenticated for any other request
+3) By-passing Security:
+	-	Some URLs do not need to be secure
+		-	such as static resources
+	-	Using permitAll() allows open-access
+		-	But still processed by Spring Security
+		-	Possible to skip security checks completely		
+		@Configuration
+		@EnableWebSecurity
+		public class SecurityConfig extends WebSecurityConfigurerAdapter	{
+			@Override
+			protected void configure(WebSecurity web) throws Exception {
+				web.ignoring().mvcMatchers("/css/**","/images/**","/javascript/**");
+														^ These URLs pass straight through, no checks
+			}
+			...
+		}
+																
+4) Spring Security's Tag Library:
+	<%@ taglib prefix="security" url="http://www.springframework.org/security/tags" %>																
+	<security:authentication property="principal.username" />
+	-	Display properties of the Authentication object
+		You are logged in as:
+		<security:authentication property="principal.username" />
+		
+	-	Hide sections of output based on role
+		<security:authorize ...>
+			TOP-SECRET INFORMATION
+			Click <a href="/admin/deleteAll">HERE</a>	
+												^ Content hidden from unauthorized users
+			to delete all records
+		</security:authorize>
+		
+5) Method Security:
+	-	Spring Security uses AOP for security at the method level
+	
+	-	Method Security - JSR - 250
+		-	Only supports role-based security
+			-	JSR-250 annotations must be enabled
+		@EnableGlobalMethodSecurity(jsr250Enabled=true)					
+	
+	-	Method Security with SpEL:
+		-	Use Pre/Post annotation for SpEL
+		@EnableGlobalMethodSecurity(prePostEnabled=true)	
