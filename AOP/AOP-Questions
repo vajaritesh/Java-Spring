@@ -1,0 +1,150 @@
+1)	What problem AOP solve?
+	-	Aspect-Oriented Programming (AOP) enables modularization of cross-cutting concerns	
+		-	To avoid tangling
+		-	To eliminate scattering
+		
+2) What are cross-cutting concerns?
+	-	Generic functionality that is needed in many places in your application
+	Examples:
+		-	Logging and Tracing
+		-	Transaction Management
+		-	Security
+		-	Caching
+		-	Error Handling
+		-	Performance Monitoring
+		-	Custom Business Rules
+		
+3) How AOP works?
+	-	Implement your business application logic
+		-	Focusing on the core problem (business problem not infrastructure)
+	-	Write aspects to implement your cross cutting concerns
+		-	Spring provides many aspects out-of-the-box
+	-	Weave the aspects into your application
+		-	Adding the cross-cutting behaviors to the right places.
+		
+4) Spring AOP:
+	-	Java-based AOP framework with AspectJ integration
+		-	Uses dynamic proxies for aspect weaving
+		
+5) Core AOP Concepts:
+	-	Join Point:
+		-	A execution point in program like a method call or exception thrown				
+	-	Pointcut:
+		-	An expression that selects one or more Join Points
+	-	Advice:
+		-	Code that executed at each selected Join Point
+	-	Aspect:
+		-	A module that encapsulates pointcuts and advice
+	-	Weaving:
+		-	Technique by which aspects are combined with main code
+						
+	-	Proxy In AOP:
+		-	The "woven" class that stands in place of your original
+			-	with extra behavior (Aspect) added (woven) into it
+
+6) Defining Pointcuts:
+	-	Spring AOP uses AspectJ's pointcut expression language
+		-	For selecting where to apply advice
+	-	Spring AOP supports a practical subset
+	
+7)	Common Pointcut Designator:
+	-	execution(<method pattern>)
+		-	The method must match the pattern
+	-	can chain together to create composite pointcuts
+		-	&& (and), || (or), !(not)
+	-	Method Pattern
+		-	[Modifiers] ReturnType [ClassType]
+				MethodName (Arguments) [throws ExceptionType]
+				
+8) Writing Expressions:
+	execution(* rewards.restaurant.*Service.find*(..))
+			^	  ^			^				^	  ^	   ^
+			|	  |			|				|	  |	   | parameters
+		designator|		package			   type	 method
+				  |
+			Return Type  
+			
+		Wildcards:
+			*	- matches once (return type, package, class/method name, argument)
+			..	- matches zero or more (arguments or packages)
+			
+9) Types of Advice:
+	1) @Before
+	2) @AfterReturningAdvice
+	3) @AfterThrowingAdvice
+	4) @AfterAdvice
+	5) @AroundAdvice 																		
+
+	1) @Before
+		@Aspect
+		public class PropertyChangeTracker {
+			private Logger logger = Logger.getLogger(getClass());
+			@Before("execution(void set*(*))")
+							^ Track calls to all setter methods		
+			public void trackChange()	{
+				logger.info("Property about to change...");
+			}
+		}
+		Note - If the advice throws an exception, target will not be called - This is a valid use of Before Advice
+		
+	2) @AfterReturning
+		@AfterReturning(value="execution(* service..*.*(..))",	returning="reward")
+													^ Audit all operations in the service package that return a Reward object
+		public void audit(JoinPoint jp, Reward reward)	{
+			auditService.logEvent(jp.getSignature() + " returns the following reward object:" + reward.toString());
+		}	
+	3) @AfterThrowingAdvice
+		-	Use @AfterThrowing annotation with the throwing attribute
+		-	Only invokes advice if the right exception the is thrown							 
+		Example:
+		@AfterThrowing(value="execution(* *..Repository.*(..))", throwing="e")
+									^ Send an email every time a Repository class throws an exception of type DataAccessException
+		public void report(JoinPoint jp, DataAccessException e) {
+			mailService.emailFailuer("Exception in repository", jp,e);
+		}
+			
+		-	After Throwing Advice - Propagation:
+			-	The @AfterThrowing advice will not stop the exception from propagating
+			-	However it can throw a different type of exception
+			@AfterThrowing(value=“execution(* *..Repository.*(..))”, throwing=“e”) 
+			public void report(JoinPoint jp, DataAccessException e) {
+				mailService.emailFailure(“Exception in repository”, jp, e);
+				throw new RewardsException(e); 
+			}
+			-	If you wish to stop the exception from propagating any further, you can use an @Around advice
+	4) @AfterAdvice
+		-	Called regardless of whether an exception has been thrown by the target or not
+		Example:	
+		@Aspect
+		public class PropertyChangeTracker	{
+			private Logger logger = Logger.getLogger(getClass());
+			@After(“execution(void update*(..))”)
+						^ Track calls to all update methods 
+			public void trackUpdate() {
+				logger.info(“An update has been attempted ...”);
+									^ We don't know how the method terminated 
+			}
+		}
+	
+	5) @AroundAdvice
+		-	Use @Around annotation and a ProceedingJoinPoint
+				-	Inherits from JoinPoint and adds the proceed() method
+		Example:
+		@Around("execution(@example.Cacheable * rewards.service..*.*(..))”) 
+		public Object cache(ProceedingJoinPoint point) throws Throwable {
+			Object value = cacheStore.get(CacheUtils.toKey(point));
+			if (value == null) {	<-- Proceed only if not cached
+				value = point.proceed(); 
+				cacheStore.put(CacheUtils.toKey(point), value);
+			}
+			return value; 
+		}	
+		Cached value return by cacheable services
+			
+10) Limitation of Spring AOP:
+	-	Can only Advice non-private methods
+	-	Can only apply aspects to Spring Beans
+	-	Limitation of weaving with proxies:
+		-	When using proxies, suppose method a() calls method b() on the same class/interface
+			-	Advice will never be executed for method b()	
+			
