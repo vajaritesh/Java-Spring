@@ -64,7 +64,7 @@ Topic in this file:
 		Query createQuery(String jpqlString):
 			Create a JPQL query
 		Flush():
-			Force changed enity state to be written to database immediately
+			Force changed entity state to be written to database immediately
 							
 -	JPA Providers:
 	-	Several major implementations of JPA spec
@@ -254,7 +254,7 @@ Topic in this file:
 		1.	Define an EntityManagerFactory bean
 		2.	Define a DataSource bean
 		3.	Define a Transaction Manager bean
-		4.	Define Mapping Metadata 
+		4.	Define Mapping Meta-data 
 		5.	Define DAOs
 		Note - There are many configuration options for EntityManagerFactory, persistence.xml, and DataSource
 		
