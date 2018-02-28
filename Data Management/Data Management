@@ -331,5 +331,5 @@ Topic in this file:
 		-	Supports most leading data-access technologies
 			-	Relational and non-relational (NoSQL)
 		-	A key component of the core spring libraries
-		-	Automatic Caching facility			
+		-	Automatic Caching facility
 
