@@ -1,0 +1,187 @@
+1) What is a Transaction?
+	-	A set of tasks which will happen as single, invisible action
+	-	ACID
+	
+2) Why use Transaction?
+	-	Atomic:
+		-	Each set of work, either all happen or non happen
+	-	Consistent:
+		-	Database integrity constraints are never violated
+	-	Isolated:
+		-	each transaction happen independently in isolated 
+	-	Durable:
+		-	Committed changes are permanent
+		
+3) Spring Transaction Management:
+	-	Spring separates transaction demarcation from transaction implementation
+		-	Demarcation expressed declaratively via AOP
+			-	Programmatic approach also available
+		-	PlatformTransactionManager abstraction hides implementation details
+			-	Several implementations available
+		-	Spring uses the same API for global vs. local
+			-	changes from local to global is minor
+				-	just change the transaction manager	
+				
+	-	There are only 2 steps
+		-	Declare a PlatformTransactionManager bean
+		-	Declare the transactional methods
+			-	Using Annotations, XML, Programmatic
+			-	Can mix and match						
+			
+	-	PlatformTransactionManager
+		-	Spring's PlatformTransactionManager is the base interface for the abstraction
+		-	Several Implementations are available
+			-	DataSourceTransactionManager
+			-	HibernateTransactionManager
+			-	JpaTransactionManager
+			-	JtaTransactionManger
+			-	WebLogicJtaTransactionManger
+			-	WebSphereUowTransactionManger
+			-	and more
+			
+		@Bean
+		public PlatformTransactionManager transactionManager(DataSource dataSource)	{
+			return new DataSourceTransactionManager(dataSource);
+		}
+		-	A DataSource bean must define elsewhere						
+				
+		@Configuration
+		@EnableTransactionManagement	<-- Defines a Bean Post-Processor - proxies @Transactional beans
+		public class TxnConfig	{
+			@Bean
+			public PlatformTransactionManager transactionManager(DataSource ds);
+		} Or use <tx:annotation-driven />	
+	
+	
+4) 	@Transactional: What happens exactly?
+	-	Target object wrapped in a proxy				
+		-	Uses an Around advice
+	-	Proxy implements the following behavior
+		-	Transaction started before entering the method
+		-	Commit at the end of the method
+		-	Rollback if method throws a RuntimeException
+			-	Default behavior
+			-	Can be overriden
+	-	Transaction context bound to current thread
+	-	All controlled by configuration			
+	
+5) @Transactional - Class Level:
+	-	Applies to all methods declared by interfaces
+		@Transactional
+		public class RewardNetworkImpl implements RewardNetwork	{
+			public RewardConfirmation rewardAccountFr(Dining d) {
+				// atomic unit-of-work
+			}
+			public RewardConfirmation updateConfirmation(RewardConfirmation rc)	{
+				// atomic unit-of-work
+			}
+		}
+		
+6) @Transactional - Class and method levels:
+	-	Combining class and method levels
+		@Transactional(timeout=60)	<-- default settings
+		public class RewardNetworkImpl implements RewardNetwork	{
+			public RewardConfirmation rewadAccountFor(Dining d)	{
+				// atomic unit-of-work
+			}
+			@Transactional(timeout=45)	<--- overrides attributes at method level
+			public RewardConfirmation updateConfirmation(RewardConfirmation rc)	{
+				// atomic unit-of-work
+			}
+		}
+		
+7) Isolation levels:
+	-	4 Isolation levels can be used:
+		-	READ_UNCOMMITTED
+		-	READ_COMMITTED
+		-	REPEATABLE_READ
+		-	SERIALIZABLE
+									
+	-	READ_UNCOMMITTED:
+		-	Lowest Isolation level - allows dirty reads
+		-	Current transaction can see the results of another uncommitted unit-of-work
+		-	Typically used for large, intrusive read only transactions
+		-	And/or where the data is constantly changing
+		public class RewardNetworkImpl implements RewardNetwork	{
+			@Transactional(isolation=Isolation.READ_UNCOMMITTED)
+			public BigDecimal totalRewards(String merchantNumber, int year)	{
+				// Calculate total rewards for a restaurant for a whole year
+			}
+		}
+		
+	-	READ_COMMITTED:	
+		-	Does not allow dirty reads
+			-	only committed information can be accessed
+		-	Default strategy for most databases
+		public class RewardNetworkImpl implements RewardNetwork	{
+			@Transactional(isolation=Isolation.READ_COMMITTED)
+			public RewardConfirmation rewardAccountFor(Dining dining)	{
+				// atomic unit-of-work
+			}
+		}
+		
+	-	REPEATABLE_READ:
+		-	Does not allow dirty reads
+		-	Non-repeatable reads are prevented
+			-	If a row read twice in the same transaction, the result will always be the same
+				-	Might result in locking depending on the DBMS
+	-	SERIALIZABLE:
+		-	Prevents non-repeatable reads and dirty-reads
+		-	Also prevents phantom reads
+		
+8) Transaction Propagation with Spring:
+	-	7 levels of propagation
+		-	The following examples show just REQUIRED and REQUIRES_NEW
+			-	Check documentation for other levels
+			
+	-	REQUIRED:
+		-	Default value
+		-	Execute within a current transaction, create a new one if none exits
+			@Transactional(propagation=Propagation.REQUIRES)
+			
+	-	REQUIRES_NEW:
+		-	Create a new transaction, suspending the current transaction if exits				
+			@Transactional(propagation=Propagation.REQUIRES_NEW)											
+	
+9) Rollback rules:
+	-	Default Behavior:
+		-	By default, a transaction is roll back if a RuntimeException has been thrown
+			-	Could be any kind of RuntimeException:
+				DataAccessException, HibernateException etc.
+					
+	-	rollbackFor and noRollbackFor
+		-	Default settings can be overridden with rollbackFor and/or noRollbackFor attributes			
+			public class RewardNetworkImpl implements RewardNetwork	{
+				@Transactional(rollbackFor=MyCheckedException.class, noRollbackFor={JmxException.class, MailException.class})
+				public RewardConfirmation rewardAccountFor(Dining d)	throws Exception {
+					// ...
+				}
+			}
+			
+10) Testing:
+	-	@Transactional within Integration Test:
+		-	Annotate test method (or class) with @Transactional
+			-	Run test method in a transaction
+			-	Transaction will be rolled back afterwards
+				-	No need to clean up your database after testing
+		@ContextConfiguration(classes=RewardConfig.class)
+		@RunWith(SpringJUnit4ClassRunner.class)
+		public class RewardNetworkTest	{
+			@Test
+			@Transactional	<-- This test is now Transactional
+			public void testRewardAccountFor()	{
+				...
+			}
+		}
+		
+	-	Controlling Transactional Tests
+		@ContextConfigurtion(classes=RewardsConfig.class)
+		@RunWith(SpringJUnit4ClassRunner.class)
+		@Transactional	<-- Make all tests transactional
+		public class RewardNetworkTest	{
+			@Test
+			@Commit	<-- Commit transaction at end of test
+			public void testRewardAccountFor()	{
+				...	// Whatever happens here will be committed
+			}
+		}								
