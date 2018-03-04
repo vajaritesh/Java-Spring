@@ -1,0 +1,112 @@
+1) Spring MVC supports for RESTfull applications:
+	-	Map requests based on HTTP method
+	-	Define response status
+	-	Message Converters
+	-	Access request and response body data
+	-	Build valid Location URIs
+	
+2) Request/Response Processing:
+	-	Request Mapping Based on HTTP Method:
+		-	Can map HTTP requests based on method
+			-	Allow same URL to mapped to multiple Java methods
+		-	RequestMethod enumerators are
+			-	GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS, TRACE
+			
+		@RequestMapping(path="/orders", method=RequestMethod.DELETE) 
+		public void updateOrders( ... ) {
+	 	 	// delete all Orders
+		}
+		@RequestMapping(path="/orders/{id}", method=RequestMethod.PUT) 
+		public void updateOrder( ... ) {
+	   		// update order using data from the request
+		}
+		
+		-	Simple MApping Annotations:
+			-	Alternative handler mapping shortcuts
+				-	@RequestMapping(path="/accounts", method=RequestMethod.GET);
+				-	Or @GetMapping("/accounts");
+			-	Exits for these HTTP methods
+				-	@GetMapping
+				-	@PostMapping
+				-	@PutMapping
+				-	@DeleteMapping
+				-	@PatchMapping
+			-	For HEAD, OPTIONS, TRACE use RequestMethod enumerators
+			
+3) HTTP Status Code Support:
+	-	Web apps just use handful of status codes
+		-	Success: 200 OK
+		-	Redirect: 30x for Redirects
+		-	Client Error: 404 Not Found
+		-	Server Error: 500 (such as unhandled exceptions)		
+	-	RESTful applications use many additional codes
+		-	Created successfully: 201
+		-	HTTP method not supported: 405
+		-	Cannot generate response body requested: 406
+		-	Request body not supported: 415
+		
+	-	@ResponseStatus:
+		-	Spring can place at class-level, applies to all methods
+		-	To return status code other than 200
+			-	Use HttpStatus enumerator
+		Note: @ResponseStatus on void methods
+			-	No longer want to return a view name - no View at all!
+			-	Method returns a response with empty body (no-content)
+		@PutMapping("orders/{}id")
+		@ResponseStatus(HttpStatus.NO_CONTENT)	// 204
+		public void updateOrder(...)	{
+			// Update order
+		}
+		
+4) Accessing Request/Response Data:
+	-	The Problem:
+		-	HTTP GET needs to return data in response body
+		-	HTTP POST and PUT receive data in request body
+		-	Typically XML or JSON
+		-	Want to work with Java objects
+		-	Want to avoid converting between formats manually
+	-	The Solution
+		-	Use Marshaling via dedicated message-converters
+		-	Annotate incoming data with @RequestBody
+		-	Annotate outgoing data with @ResponseBody
+		
+	HttpMessageConverter:
+		-	Converts HTTP request/response body data
+			-	XML (using JAXP Source, JAXB2 mapped object, Jackson-Dataformat-XML)						
+			-	Jackson JSON, GSON Feed data such as Atom/RSS
+			-	Google protocol buffers
+			-	Form-based data
+			-	Byte[], String, BufferedImage				
+		-	Must enable otherwise no convertors defined at all!
+			-	Automatic with Spring Boot
+			-	@EnableWebMvc or <mvc:annotation-driven>
+			-	Or define explicitly (allows you to register extra convertors)
+				-	Using WebMvcConfigurer or <mvc />							
+	-	@RequestBody
+		-	To use converters for incoming request data
+			-	Correct converter chosen automatically
+				-	Based on content type of request
+			-	updatedOrder could be mapped from XML (with JAXB2) or from JSON (with Jackson)
+				-	Annotate Order class to help JAXB/Jackson work
+				
+			@PutMapping(path="/orders/{id}") 
+			@ResponseStatus(HttpStatus.NO_CONTENT) // 204
+			public void updateOrder(@RequestBody Order updatedOrder,
+			                        @PathVariable("id") long id) {
+				   // process updated order data and return empty response
+				   orderManager.updateOrder(id, updatedOrder);
+			}		
+				
+	-	@ResponseBody:
+		-	Use converters for response data by annotating return data with @ResponseBody
+		-	Converter handles rendering a response
+			-	Again, no ViewResolver and View involved any more!			
+		@GetMapping(path="/orders/{id}") 
+		public @ResponseBody Order getOrder(@PathVariable("id") long id) {
+			// Order class is annotated with JAXB2's @XmlRootElement 
+			Order order= orderService.findOrderById(id);
+			// results in XML response containing marshalled order: 
+			return order;
+		}								
+		
+		
